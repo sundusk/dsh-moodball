@@ -91,9 +91,33 @@ else
     exit 0
 fi
 
-# ---------------------------------------------------------------- 3. 安装 app
+# ---------------------------------------------------------------- 3. 获取 app
+RELEASE_VERSION="v0.1.0"
+RELEASE_URL="https://github.com/sundusk/mac-ballpet-deepseekharness/releases/download/$RELEASE_VERSION/Waterball.app.zip"
+APP_TMP=""
+
+# 优先用本地构建产物（开发者场景）；否则从 GitHub Release 下载（普通用户场景）
+if [ -d "$APP_SRC" ]; then
+    ok "使用本地构建产物 $APP_SRC"
+else
+    info "未找到本地 $APP_SRC，从 GitHub Release 下载……"
+    APP_TMP="$(mktemp -d)"
+    if ! curl -fsSL -m 120 -o "$APP_TMP/Waterball.app.zip" "$RELEASE_URL"; then
+        err "下载 Release 失败：$RELEASE_URL"
+        echo "请检查网络，或手动下载：$RELEASE_URL"
+        exit 1
+    fi
+    if ! unzip -qo "$APP_TMP/Waterball.app.zip" -d "$APP_TMP"; then
+        err "解压失败（需要 unzip 命令）。"
+        exit 1
+    fi
+    APP_SRC="$APP_TMP/Waterball.app"
+    ok "已下载并解压 Release 版 app"
+fi
+
+# ---------------------------------------------------------------- 4. 安装 app
 if [ ! -d "$APP_SRC" ]; then
-    err "未找到 $APP_SRC —— 请先在本仓库目录运行 ./make-app.sh 构建 app，或直接下载 Release 包。"
+    err "未找到 $APP_SRC —— app 获取失败。"
     exit 1
 fi
 
@@ -106,6 +130,10 @@ info "复制 app 到 $APP_DEST ……"
 cp -R "$APP_SRC" "$APP_DEST"
 xattr -dr com.apple.quarantine "$APP_DEST" 2>/dev/null || true
 ok "app 已安装到 $APP_DEST"
+
+if [ -n "$APP_TMP" ]; then
+    rm -rf "$APP_TMP"
+fi
 
 info "启动桌面呼吸灯……"
 open "$APP_DEST"
