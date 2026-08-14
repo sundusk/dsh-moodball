@@ -1,7 +1,66 @@
-# waterball-mac — macOS 悬浮呼吸灯（交接文档）
+# waterball-mac — macOS 悬浮呼吸灯
 
-目标：做一个原生 macOS 悬浮窗，让「DeepSeek Harness」的运行状态能在网页之外
-被看到。形态是菜单栏常驻 + 一颗置顶的发光小球，颜色随 agent 状态变化并呼吸。
+macOS 原生悬浮呼吸灯：菜单栏常驻 + 一颗置顶的发光小球，颜色随
+「DeepSeek Harness」的 agent 状态变化并呼吸（思考中=绿、调工具=紫、完成=青、
+出错=红…共 7 色，颜色可在设置面板自定义）。
+
+```
+DeepSeek Harness 进程 → dsh-waterball 插件（监听 agent 事件，提供状态接口）
+                           → /api/waterball/status → 桌面球 700ms 轮询变色
+```
+
+## 📦 安装（给新用户）
+
+### 安装依赖
+
+1. **macOS 14+**
+2. **DeepSeek Harness**：安装方法见 [DeepSeek Harness 官方文档](https://github.com/sundusk/dsh-waterball-pet)，装好后终端能运行 `dsh web`
+3. **Node.js + pnpm**（一键脚本自动装插件时需要）：https://nodejs.org
+
+### 一键安装
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sundusk/mac-ballPet-DeepSeekHarness/main/install.sh | bash
+```
+
+脚本会自动：
+1. 检查 `dsh` 是否已安装（未装则提示）
+2. 检测 `/api/waterball/status` 接口，未装插件则自动执行 `dsh plugin --profile web add github:sundusk/dsh-waterball-pet`
+3. 把 `Waterball.app` 复制到 `/Applications` 并启动
+
+> 若脚本检测到刚安装了插件，会提示你先重启 `dsh web`（终端 Ctrl+C 后重新运行
+> `dsh web`），再重新执行脚本完成 app 安装。
+
+### 手动安装（备选）
+
+```bash
+# 1. 装插件（状态接口的生产者）
+dsh plugin --profile web add github:sundusk/dsh-waterball-pet
+# 2. 重启 dsh web
+# 3. 构建并运行桌面球
+./make-app.sh   # 或直接打开 dist/Waterball.app
+```
+
+### 安装后
+
+- 桌面右下角出现发光呼吸球，随 agent 状态变色呼吸
+- **插件默认隐藏网页端水球**（接口常驻），想同时在网页看到水球：
+  Web UI → 设置 → 插件 → 水球宠物 → 关闭「隐藏网页水球」
+- 菜单栏图标：显示/隐藏悬浮球、打开设置面板、退出
+- 设置面板：球大小/呼吸速度/7 色自定义/眼睛开关与颜色/API 地址/轮询间隔/穿透模式
+
+### 从源码构建
+
+```bash
+./make-app.sh   # swift build -c release → 组装 dist/Waterball.app → open 启动
+./run.sh        # 开发模式：直接 swift run
+```
+
+---
+
+## 开发文档（交接）
+
+以下为原交接文档内容，供二次开发参考。
 
 ## 数据来源（已就绪，无需再开发）
 
@@ -43,12 +102,13 @@ GET http://127.0.0.1:3080/api/waterball/status
    `Circle + radialGradient + blur` 即可实现。
 2. **Tauri（Rust + WebView）**：能直接复用网页版水球 HTML/CSS，但要 Rust 工具链。
 
-## 网页插件（状态的生产者，已完成，无需改动）
+## 网页插件（状态的生产者）
 
-- 路径：`dsh-web-ui/packages/dsh-waterball`（已构建 `lib/`，已安装进 `~/.dsh/profiles/web`）。
-- 职责：Host 半区监听 agent 活动 → 产出 `mood` → 暴露 `/api/waterball/status`。
-- 修改它：改源码后 `cd dsh-web-ui && pnpm --filter @linxin666/dsh-waterball build`，
-  再重启 `dsh web`（或网页刷新）生效。
+- 仓库：`github.com/sundusk/dsh-waterball-pet`（含已构建的 `lib/`，GitHub 直接安装）
+- 安装：`dsh plugin --profile web add github:sundusk/dsh-waterball-pet`
+- 职责：Host 半区监听 agent 活动 → 产出 `mood` → 暴露 `/api/waterball/status`
+- 特性：`hidden` 开关（初始默认隐藏网页球，仅隐藏网页渲染，接口常驻供桌面球使用）
+- 修改它：改源码后 `cd dsh-waterball-pet && pnpm build`，提交 `lib/` 后重新安装
 
 ## 开工建议
 
