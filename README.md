@@ -82,8 +82,9 @@ SwiftUI 原生（技术选型 1），SwiftPM 可执行目标，无第三方依�
 | 700ms 轮询 | `Timer` 每 0.7s GET `/api/waterball/status`，2s 超时；DSH 关闭 → 灰球「未连接」 |
 | 7 色映射 | 严格按上方表格：idle 蓝 / waiting 绿 / jumping 紫 / done 青 / failed 红 / stopped 黑 / waving 橙；`enabled:false` 与断连均显示灰球 |
 | 呼吸动画 | `TimelineView` 正弦驱动透明度(0.55→1) + 缩放(0.90→1.04)，周期随 mood 变化（idle 2.8s 慢 / jumping 0.8s 快） |
-| 不挡操作 | 鼠标不在球上时 `ignoresMouseEvents=true`（点击穿透）；移入恢复响应并可拖拽（100ms 全局鼠标位置轮询） |
-| 位置 | 启动时放屏幕右下角（距边 16px，跟随鼠标所在屏幕）；显示器增删/分辨率变化自动收回可视区 |
+| 不挡操作 | 鼠标不在球上时 `ignoresMouseEvents=true`（点击穿透）；移入恢复响应（100ms 全局鼠标位置轮询） |
+| 随便拖 | 按住球体任意位置即可拖动到任意位置/任意屏幕（SwiftUI `DragGesture` 抓取点跟随，1:1 平滑）；抬手即记住位置，重启后自动恢复；显示/隐藏后再显示也回到原位 |
+| 位置 | 启动时优先恢复上次拖拽位置（`UserDefaults`），否则放鼠标所在屏幕右下角（距边 16px）；显示器增删/分辨率变化自动收回可视区 |
 
 ### 目录结构
 
@@ -102,6 +103,9 @@ waterball-mac/
 
 - 悬浮球显隐通过 `WaterballModel.isBallVisible` 驱动（`NSApp.delegate` 在 SwiftUI 下是
   `SwiftUI.AppDelegate` 包装类型，不能 `as? AppDelegate`，故不依赖它）。
+- 拖拽用 SwiftUI `DragGesture` + 全局鼠标坐标（`NSEvent.mouseLocation`）驱动窗口
+  `setFrameOrigin`：抓取点相对窗口的偏移保持不变，窗口 1:1 跟随光标，不受窗口移动的
+  坐标系反馈影响（`isMovableByWindowBackground` 在 NSHostingView 下实测无效）。
 - `stopped` 是纯黑球，深色壁纸上加了一圈淡白描边便于辨认。
 - 日志：`log show --predicate 'subsystem == "com.linxin666.waterball-mac"'`（info 级，
   含轮询位置与显隐切换，便于排查）。

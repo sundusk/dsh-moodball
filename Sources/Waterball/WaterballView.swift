@@ -2,8 +2,12 @@ import SwiftUI
 
 /// 发光小球：radialGradient 本体 + blur 外发光 + 高光，
 /// 用 TimelineView 按 mood 周期做正弦呼吸（透明度 + 缩放，ease-in-out 平滑）。
+/// 附带拖拽手势：按住球体任意位置即可把整个悬浮窗拖到任何地方（位置会记住）。
 struct WaterballView: View {
     @ObservedObject var model: WaterballModel
+    /// 按下时鼠标与窗口原点的偏移（全局坐标），拖拽中保持不变
+    @State private var grabOffset: CGSize = .zero
+    @State private var hasGrabOffset = false
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { timeline in
@@ -60,5 +64,48 @@ struct WaterballView: View {
         }
         .frame(width: model.ballSize * 2.0, height: model.ballSize * 2.0)
         .allowsHitTesting(true)
+        .contentShape(Circle()) // 只在球体/光晕圆形区域内响应拖拽，四个角不挡操作
+        .gesture(dragGesture)
+    }
+
+    /// 拖拽：让窗口跟随鼠标的全局位置（抓取点保持在光标下），
+    /// 不依赖手势 translation，避免窗口移动后坐标系反馈导致拖拽缩水。
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { _ in
+                guard let panel = WaterballPanel.current else { return }
+                panel.isDragging = true
+                let mouse = NSEvent.mouseLocation // 全局坐标（左下原点），与 frame.origin 同坐标系
+                if !hasGrabOffset {
+                    grabOffset = CGSize(
+                        width: mouse.x - panel.frame.origin.x,
+                        height: mouse.y - panel.frame.origin.y
+                    )
+                    hasGrabOffset = true
+                }
+                panel.setFrameOrigin(NSPoint(
+                    x: mouse.x - grabOffset.width,
+                    y: mouse.y - grabOffset.height
+                ))
+            }
+            .onEnded { _ in
+                guard let panel = WaterballPanel.current else {
+                    hasGrabOffset = false
+                    grabOffset = .zero
+                    return
+                }
+                // 抬手时把抓取点精确归位到光标下，消除事件延迟造成的残差
+                if hasGrabOffset {
+                    let mouse = NSEvent.mouseLocation
+                    panel.setFrameOrigin(NSPoint(
+                        x: mouse.x - grabOffset.width,
+                        y: mouse.y - grabOffset.height
+                    ))
+                }
+                hasGrabOffset = false
+                grabOffset = .zero
+                panel.isDragging = false
+                panel.persistPosition()
+            }
     }
 }
