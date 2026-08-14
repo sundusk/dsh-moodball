@@ -24,9 +24,10 @@ final class WaterballPanel: NSPanel {
     override var canBecomeMain: Bool { false }
     override var acceptsFirstResponder: Bool { true }
 
-    /// 尝试恢复上次拖拽保存的位置；仅当位置仍在某个屏幕可视区内才生效
+    /// 尝试恢复上次拖拽保存的位置；仅当设置允许且位置仍在某个屏幕可视区内才生效
     @discardableResult
     func restoreSavedPosition() -> Bool {
+        guard SettingsStore.shared.rememberPosition else { return false }
         let defaults = UserDefaults.standard
         guard let x = defaults.object(forKey: PositionKeys.x) as? CGFloat,
               let y = defaults.object(forKey: PositionKeys.y) as? CGFloat else { return false }
@@ -37,8 +38,9 @@ final class WaterballPanel: NSPanel {
         return true
     }
 
-    /// 拖拽结束时保存当前位置
+    /// 拖拽结束时保存当前位置（受「记住位置」设置控制）
     func persistPosition() {
+        guard SettingsStore.shared.rememberPosition else { return }
         UserDefaults.standard.set(frame.origin.x, forKey: PositionKeys.x)
         UserDefaults.standard.set(frame.origin.y, forKey: PositionKeys.y)
         appLog.info("persistPosition -> \(Int(self.frame.origin.x)),\(Int(self.frame.origin.y))")
@@ -49,8 +51,10 @@ final class WaterballPanel: NSPanel {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = WaterballModel.shared
     private var panel: WaterballPanel?
+    private var settingsPanel: NSPanel?
     private var hoverTimer: Timer?
     private var visibilitySink: AnyCancellable?
+    private var settingsSink: AnyCancellable?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 纯菜单栏应用：不占 Dock
@@ -60,11 +64,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.start()
         startHoverMonitor()
         observeVisibility()
+        observeSettings()
         // 显示器增删/分辨率变化时，把球收回可视区（避免被 macOS 甩到屏幕外）
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(screenParametersChanged),
             name: NSApplication.didChangeScreenParametersNotification,
+            object: nil
+        )
+        // 设置面板「重置位置」请求
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(resetPositionRequested),
+            name: .waterballResetPosition,
+            object: nil
+        )
+        // 菜单栏「设置…」请求
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(toggleSettingsPanelNotification),
+            name: .waterballToggleSettings,
             object: nil
         )
         appLog.info("didFinishLaunching done")
@@ -79,7 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - 悬浮窗
 
     private func setupPanel() {
-        let size = model.ballSize * 2.0
+        let size = SettingsStore.shared.ballSize * 2.0
         let panel = WaterballPanel(
             contentRect: NSRect(x: 0, y: 0, width: size, height: size),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -133,6 +152,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @objc private func resetPositionRequested() {
+        guard let panel else { return }
+        positionAtBottomRight(panel)
+    }
+
+    @objc private func toggleSettingsPanelNotification() {
+        toggleSettingsPanel()
+    }
+
+    // MARK: - 设置联动
+
+    private func observeSettings() {
+        // 球大小变化 → 保持中心不动地调整窗口尺寸
+        settingsSink = SettingsStore.shared.$ballSize
+            .receive(on: RunLoop.main)
+            .sink { [weak self] newSize in
+                guard let self, let panel = self.panel else { return }
+                let d = newSize * 2.0
+                let old = panel.frame
+                panel.setFrame(
+                    NSRect(x: old.midX - d / 2, y: old.midY - d / 2, width: d, height: d),
+                    display: true
+                )
+                appLog.info("ballSize changed -> \(Int(newSize))")
+            }
+    }
+
     // MARK: - 悬停检测（穿透 ↔ 可拖拽）
 
     private func startHoverMonitor() {
@@ -145,12 +191,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateHover() {
         guard let panel, panel.isVisible else { return }
-        // NSEvent.mouseLocation 与 window.frame 都是「左下原点」的全局屏幕坐标，可直接比较
-        let inside = panel.frame.contains(NSEvent.mouseLocation)
-        // 拖拽进行中保持响应，防止拖到一半被切成点击穿透
-        let shouldIgnore = !panel.isDragging && !inside
-        if panel.ignoresMouseEvents != shouldIgnore {
-            panel.ignoresMouseEvents = shouldIgnore
+        switch SettingsStore.shared.clickThroughMode {
+        case .always:
+            // 永远穿透：常驻忽略鼠标事件（不可拖拽）
+            if !panel.ignoresMouseEvents { panel.ignoresMouseEvents = true }
+        case .never:
+            // 永不穿透：常驻响应（无穿透）
+            if panel.ignoresMouseEvents { panel.ignoresMouseEvents = false }
+        case .hover:
+            // 悬停恢复：鼠标在球上时响应（可拖拽），否则穿透
+            let inside = panel.frame.contains(NSEvent.mouseLocation)
+            let shouldIgnore = !panel.isDragging && !inside
+            if panel.ignoresMouseEvents != shouldIgnore {
+                panel.ignoresMouseEvents = shouldIgnore
+            }
         }
     }
 
@@ -170,5 +224,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 appLog.info("visibility sink: visible=\(visible, privacy: .public) panelIsVisible=\(panel.isVisible, privacy: .public)")
             }
+    }
+
+    // MARK: - 设置面板
+
+    /// 打开/关闭设置面板（菜单栏「设置…」）
+    func toggleSettingsPanel() {
+        if let settingsPanel, settingsPanel.isVisible {
+            settingsPanel.orderOut(nil)
+            return
+        }
+        openSettingsPanel()
+    }
+
+    private func openSettingsPanel() {
+        let panel: NSPanel
+        if let existing = settingsPanel {
+            panel = existing
+        } else {
+            let p = NSPanel(
+                contentRect: NSRect(x: 0, y: 0, width: 420, height: 520),
+                styleMask: [.titled, .closable],
+                backing: .buffered,
+                defer: false
+            )
+            p.title = "水球设置"
+            p.isReleasedWhenClosed = false
+            p.hidesOnDeactivate = false
+            p.contentView = NSHostingView(rootView: SettingsPanelView())
+            p.center()
+            settingsPanel = p
+            panel = p
+        }
+        // 设置面板需要能输入（TextField 等），临时激活本 app
+        NSApp.activate(ignoringOtherApps: true)
+        panel.makeKeyAndOrderFront(nil)
+        appLog.info("settings panel opened")
     }
 }

@@ -49,6 +49,11 @@ struct MenuBarContent: View {
                 model.isBallVisible.toggle()
             }
 
+            Button("设置…") {
+                // 通过通知路由到 AppDelegate，避免依赖 NSApp.delegate 类型
+                NotificationCenter.default.post(name: .waterballToggleSettings, object: nil)
+            }
+
             Button("退出") {
                 NSApp.terminate(nil)
             }

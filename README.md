@@ -79,12 +79,13 @@ SwiftUI 原生（技术选型 1），SwiftPM 可执行目标，无第三方依�
 | 菜单栏常驻 | `MenuBarExtra`，圆点图标颜色随 mood 实时变化；菜单内显示当前状态、「显示 / 隐藏悬浮球」、「退出」 |
 | 置顶 | `NSPanel.level = .floating`（窗口层 layer=3） |
 | 透明无边框 | 无边框透明 panel，仅发光球可见（radialGradient + blur 外发光 + 高光） |
-| 700ms 轮询 | `Timer` 每 0.7s GET `/api/waterball/status`，2s 超时；DSH 关闭 → 灰球「未连接」 |
-| 7 色映射 | 严格按上方表格：idle 蓝 / waiting 绿 / jumping 紫 / done 青 / failed 红 / stopped 黑 / waving 橙；`enabled:false` 与断连均显示灰球 |
-| 呼吸动画 | `TimelineView` 正弦驱动透明度(0.55→1) + 缩放(0.90→1.04)，周期随 mood 变化（idle 2.8s 慢 / jumping 0.8s 快） |
-| 不挡操作 | 鼠标不在球上时 `ignoresMouseEvents=true`（点击穿透）；移入恢复响应（100ms 全局鼠标位置轮询） |
-| 随便拖 | 按住球体任意位置即可拖动到任意位置/任意屏幕（SwiftUI `DragGesture` 抓取点跟随，1:1 平滑）；抬手即记住位置，重启后自动恢复；显示/隐藏后再显示也回到原位 |
-| 位置 | 启动时优先恢复上次拖拽位置（`UserDefaults`），否则放鼠标所在屏幕右下角（距边 16px）；显示器增删/分辨率变化自动收回可视区 |
+| 700ms 轮询 | `Timer` 每 0.7s GET `/api/waterball/status`（间隔/超时/API 地址可设置）；DSH 未运行 → 灰球「DSH 未运行」，插件关闭(404) → 灰球「插件已关闭」 |
+| 7 色映射 | 严格按上方表格：idle 蓝 / waiting 绿 / jumping 紫 / done 青 / failed 红 / stopped 黑 / waving 橙；颜色可在设置面板自定义，断连灰也可调 |
+| 呼吸动画 | `TimelineView` 正弦驱动透明度(0.55→1) + 缩放(0.90→1.04)，全局统一呼吸速度（设置面板可调） |
+| 不挡操作 | 点击穿透三模式：悬停恢复（默认）/ 永远穿透 / 永不穿透（设置面板可选，100ms 全局鼠标位置轮询） |
+| 随便拖 | 按住球体任意位置即可拖动到任意位置/任意屏幕（SwiftUI `DragGesture` 抓取点跟随，1:1 平滑）；抬手即记住位置，重启后自动恢复（可关闭「记住位置」）；显示/隐藏后再显示也回到原位 |
+| 位置 | 启动时优先恢复上次拖拽位置（`UserDefaults`），否则放鼠标所在屏幕右下角（距边 16px）；显示器增删/分辨率变化自动收回可视区；面板可一键重置右下角 |
+| 设置面板 | 菜单栏「设置…」：外观（大小/呼吸速度）/ 颜色（7 色自定义 + 断连灰）/ 行为（API 地址/轮询/超时/穿透/记住位置）三 Tab，顶部实时预览小球；修改即生效并持久化 |
 
 ### 目录结构
 
@@ -94,9 +95,11 @@ waterball-mac/
 ├── make-app.sh / run.sh
 └── Sources/Waterball/
     ├── WaterballApp.swift             # @main + MenuBarExtra（图标、菜单）
-    ├── WaterballModel.swift           # 700ms 轮询、解码、mood→颜色/呼吸周期
-    ├── WaterballView.swift            # 发光球 + 呼吸动画
-    └── AppDelegate.swift              # 悬浮 panel、置顶、穿透/拖拽、显隐、显示器变化
+    ├── SettingsStore.swift            # 全局设置（UserDefaults 持久化）+ 7 色映射 + 穿透模式
+    ├── SettingsPanelView.swift        # 设置面板（外观/颜色/行为三 Tab + 实时预览）
+    ├── WaterballModel.swift           # 可配置轮询、解码、mood→颜色/呼吸速度、两种灰球区分
+    ├── WaterballView.swift            # 发光球 + 呼吸动画 + 拖拽
+    └── AppDelegate.swift              # 悬浮 panel、置顶、穿透/拖拽、显隐、设置面板、显示器变化
 ```
 
 ### 实现备注
@@ -106,6 +109,10 @@ waterball-mac/
 - 拖拽用 SwiftUI `DragGesture` + 全局鼠标坐标（`NSEvent.mouseLocation`）驱动窗口
   `setFrameOrigin`：抓取点相对窗口的偏移保持不变，窗口 1:1 跟随光标，不受窗口移动的
   坐标系反馈影响（`isMovableByWindowBackground` 在 NSHostingView 下实测无效）。
+- 设置面板通过通知路由到 AppDelegate（`NSApp.delegate` 是 `SwiftUI.AppDelegate` 包装类型，
+  不能直接 `as? AppDelegate`）；面板打开时临时 `NSApp.activate` 以便输入框可编辑。
+- 球已与网页解耦：大小由本地设置决定（不再跟随接口 `size`）；接口 `hidden` 字段（网页球隐藏）
+  不影响桌面球——只要 `enabled=true` 且接口可达，桌面球照常工作。
 - `stopped` 是纯黑球，深色壁纸上加了一圈淡白描边便于辨认。
 - 日志：`log show --predicate 'subsystem == "com.linxin666.waterball-mac"'`（info 级，
   含轮询位置与显隐切换，便于排查）。
