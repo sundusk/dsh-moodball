@@ -100,7 +100,7 @@ APP_TMP=""
 if [ -d "$APP_SRC" ]; then
     ok "使用本地构建产物 $APP_SRC"
 else
-    info "未找到本地 $APP_SRC，从 GitHub Release 下载……"
+    info "未找到本地 ${APP_SRC}，从 GitHub Release 下载……"
     APP_TMP="$(mktemp -d)"
     if ! curl -fsSL -m 120 -o "$APP_TMP/Waterball.app.zip" "$RELEASE_URL"; then
         err "下载 Release 失败：$RELEASE_URL"
@@ -122,7 +122,7 @@ if [ ! -d "$APP_SRC" ]; then
 fi
 
 if [ -d "$APP_DEST" ]; then
-    info "已存在 $APP_DEST，先移除旧版本……"
+    info "已存在 ${APP_DEST}，先移除旧版本……"
     rm -rf "$APP_DEST"
 fi
 
