@@ -29,6 +29,7 @@ enum MoodColorMap {
         case "idle":     return "空闲"
         case "waiting":  return "思考中"
         case "jumping":  return "工具调用"
+        case "authorizing": return "授权等待"
         case "done":     return "完成"
         case "failed":   return "出错"
         case "stopped":  return "已停止"
