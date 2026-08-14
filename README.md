@@ -112,7 +112,6 @@ GET http://127.0.0.1:3080/api/waterball/status
 
 ## 开工建议
 
-新项目目录就放这里：`/Users/sundusk/Desktop/deepseekAnget/waterball-mac/`，
 先做「纯发光小球」版本（菜单栏 + 置顶透明球 + 700ms 轮询 + 7 色呼吸），
 验证通了再考虑水球本体、用量读数、点击交互等。
 
