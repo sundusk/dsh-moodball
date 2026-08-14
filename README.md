@@ -61,8 +61,8 @@ dsh plugin --profile web add github:sundusk/dsh-waterball-pet
 
 **退出之后怎么再打开？**
 
-- **Spotlight**（最快）：按 `⌘ + 空格`，输入「水球」或「Waterball」，回车
-- **访达 → 应用程序**：找到「水球」，双击
+- **Spotlight**（最快）：按 `⌘ + 空格`，输入「Waterball」，回车
+- **访达 → 应用程序**：找到「Waterball」，双击
 - **终端**：`open -a Waterball`
 
 **菜单栏图标功能**（点开小圆点）：
