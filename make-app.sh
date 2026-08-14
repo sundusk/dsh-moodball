@@ -11,8 +11,10 @@ APP_DIR="dist/${APP_NAME}.app"
 ICON_SOURCE="Resources/water-ball-icon-1024.png"
 ICONSET_DIR=".build/Waterball.iconset"
 
-echo "==> swift build -c release"
-swift build -c release
+echo "==> swift build -c release --disable-sandbox"
+# --disable-sandbox：项目位于受限工作区（如 DSH 会话目录）时，
+# SwiftPM 的 sandbox-exec 会被外层沙箱拦截，需禁用内层沙箱
+swift build -c release --disable-sandbox
 
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"

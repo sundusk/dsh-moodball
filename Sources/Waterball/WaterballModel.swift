@@ -33,7 +33,6 @@ enum MoodColorMap {
         case "done":     return "完成"
         case "failed":   return "出错"
         case "stopped":  return "已停止"
-        case "waving":   return "挥手"
         default:         return "未知"
         }
     }

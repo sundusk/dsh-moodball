@@ -9,7 +9,7 @@ struct MoodColorConfig {
     let defaultHex: UInt32
 }
 
-/// 8 个 mood 的颜色配置（顺序固定）
+/// 7 个 mood 的颜色配置（顺序固定；waving 是网页端交互态，桌面球用不到故不含）
 let moodColorConfigs: [MoodColorConfig] = [
     MoodColorConfig(mood: "idle",         label: "空闲",   defaultHex: 0x60a5fa), // 蓝
     MoodColorConfig(mood: "waiting",      label: "思考中", defaultHex: 0x34d399), // 绿
@@ -18,7 +18,6 @@ let moodColorConfigs: [MoodColorConfig] = [
     MoodColorConfig(mood: "done",         label: "完成",   defaultHex: 0x22d3ee), // 青
     MoodColorConfig(mood: "failed",       label: "出错",   defaultHex: 0xf87171), // 红
     MoodColorConfig(mood: "stopped",      label: "已停止", defaultHex: 0x000000), // 黑
-    MoodColorConfig(mood: "waving",       label: "挥手",   defaultHex: 0xfb923c), // 橙
 ]
 
 /// 断连/禁用时的灰色

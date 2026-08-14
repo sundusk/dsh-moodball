@@ -133,10 +133,12 @@ GET http://127.0.0.1:3080/api/waterball/status
 | `idle` | 空闲 | 蓝 `#60a5fa` |
 | `waiting` | 思考/工作 | 绿 `#34d399` |
 | `jumping` | 工具调用 | 紫 `#a855f7` |
+| `authorizing` | 授权等待（approval/asked） | 黄 `#facc15` |
 | `done` | 完成 | 青 `#22d3ee` |
 | `failed` | 出错 | 红 `#f87171` |
 | `stopped` | 中断/停止（aborted/blocked/max-tokens/interrupted） | 黑 `#000000` |
-| `waving` | 点击挥手（网页端交互态，悬浮窗可忽略） | 橙 `#fb923c` |
+
+> 注：网页端的 `waving`（点击挥手）是网页交互态，host 不产出、接口不返回，桌面球不含此色。
 
 ## 悬浮窗需求（SwiftUI 都能原生做到）
 
@@ -191,7 +193,7 @@ SwiftUI 原生（技术选型 1），SwiftPM 可执行目标，无第三方依�
 | 置顶 | `NSPanel.level = .floating`（窗口层 layer=3） |
 | 透明无边框 | 无边框透明 panel，仅发光球可见（radialGradient + blur 外发光 + 高光） |
 | 700ms 轮询 | `Timer` 每 0.7s GET `/api/waterball/status`（间隔/超时/API 地址可设置）；DSH 未运行 → 灰球「DSH 未运行」，插件关闭(404) → 灰球「插件已关闭」 |
-| 7 色映射 | 严格按上方表格：idle 蓝 / waiting 绿 / jumping 紫 / done 青 / failed 红 / stopped 黑 / waving 橙；颜色可在设置面板自定义，断连灰也可调 |
+| 7 色映射 | 严格按上方表格：idle 蓝 / waiting 绿 / jumping 紫 / authorizing 黄 / done 青 / failed 红 / stopped 黑；颜色可在设置面板自定义，断连灰也可调 |
 | 呼吸动画 | `TimelineView` 正弦驱动透明度(0.55→1) + 缩放(0.90→1.04)，全局统一呼吸速度（设置面板可调） |
 | 不挡操作 | 点击穿透三模式：悬停恢复（默认）/ 永远穿透 / 永不穿透（设置面板可选，100ms 全局鼠标位置轮询） |
 | 随便拖 | 按住球体任意位置即可拖动到任意位置/任意屏幕（SwiftUI `DragGesture` 抓取点跟随，1:1 平滑）；抬手即记住位置，重启后自动恢复（可关闭「记住位置」）；显示/隐藏后再显示也回到原位 |
