@@ -17,15 +17,28 @@ DeepSeek Harness 进程 → dsh-waterball 插件（监听 agent 事件，提供�
 2. **DeepSeek Harness**：安装方法见 [DeepSeek Harness 官方文档](https://github.com/sundusk/dsh-waterball-pet)，装好后终端能运行 `dsh web`
 3. **Node.js + pnpm**（一键脚本自动装插件时需要）：https://nodejs.org
 
-### 一键安装
+### 一键安装（推荐）
+
+**方式一：git clone（最稳定，永远是新版）**
 
 ```bash
-curl -fsSL https://github.com/sundusk/mac-ballpet-deepseekharness/raw/refs/heads/main/install.sh | bash
+git clone --depth 1 https://github.com/sundusk/mac-ballpet-deepseekharness.git
+cd mac-ballpet-deepseekharness
+bash install.sh
 ```
 
+**方式二：从 Release 下载脚本（按版本号寻址，无缓存问题）**
+
+```bash
+curl -fsSL https://github.com/sundusk/mac-ballpet-deepseekharness/releases/download/v0.1.0/install.sh | bash
+```
+
+> 注：`raw.githubusercontent.com` 的 CDN 对新提交有缓存滞后（可能拿到旧版脚本），
+> 不推荐直接用 raw 路径的 `curl | bash`。上面两种方式都能拿到最新脚本。
+
 脚本会自动：
-1. 检查 `dsh` 是否已安装（未装则提示）
-2. 检测 `/api/waterball/status` 接口，未装插件则自动执行 `dsh plugin --profile web add github:sundusk/dsh-waterball-pet`
+1. 检测 `/api/waterball/status` 接口，未装插件则自动执行 `dsh plugin --profile web add github:sundusk/dsh-waterball-pet`
+2. 有本地 `dist/` 构建产物则用本地；否则自动从 GitHub Release 下载 `Waterball.app`
 3. 把 `Waterball.app` 复制到 `/Applications` 并启动
 
 > 若脚本检测到刚安装了插件，会提示你先重启 `dsh web`（终端 Ctrl+C 后重新运行
