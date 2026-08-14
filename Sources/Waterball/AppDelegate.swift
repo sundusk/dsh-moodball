@@ -24,16 +24,17 @@ final class WaterballPanel: NSPanel {
     override var canBecomeMain: Bool { false }
     override var acceptsFirstResponder: Bool { true }
 
-    /// 尝试恢复上次拖拽保存的位置；仅当设置允许且位置仍在某个屏幕可视区内才生效
+    /// 尝试恢复上次拖拽保存的位置；仅当设置允许且窗口中心仍在某个屏幕可视区内才生效
     @discardableResult
     func restoreSavedPosition() -> Bool {
         guard SettingsStore.shared.rememberPosition else { return false }
         let defaults = UserDefaults.standard
         guard let x = defaults.object(forKey: PositionKeys.x) as? CGFloat,
               let y = defaults.object(forKey: PositionKeys.y) as? CGFloat else { return false }
-        let frame = NSRect(x: x, y: y, width: self.frame.width, height: self.frame.height)
+        // 用「窗口中心」判断而非整窗相交：避免显示器变化后只留一截在屏边、球心在屏外
+        let center = NSPoint(x: x + self.frame.width / 2, y: y + self.frame.height / 2)
         let visibleFrames = NSScreen.screens.map(\.visibleFrame)
-        guard visibleFrames.contains(where: { $0.intersects(frame) }) else { return false }
+        guard visibleFrames.contains(where: { $0.contains(center) }) else { return false }
         setFrameOrigin(NSPoint(x: x, y: y))
         return true
     }
@@ -145,10 +146,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func screenParametersChanged() {
         guard let panel, panel.isVisible else { return }
+        // 显示器增删/分辨率变化后，若窗口中心不在任何屏幕的可视区内
+        // （可能只留一截在屏边、球心已甩到无屏幕区域，导致拖不到），
+        // 就把球收回鼠标所在屏的右下角。
+        let center = NSPoint(x: panel.frame.midX, y: panel.frame.midY)
         let visibleFrames = NSScreen.screens.map(\.visibleFrame)
-        let onScreen = visibleFrames.contains { $0.intersects(panel.frame) }
-        if !onScreen {
+        let centerOnScreen = visibleFrames.contains { $0.contains(center) }
+        if !centerOnScreen {
             positionAtBottomRight(panel)
+            appLog.info("screen changed: ball center off-screen, repositioned to bottom-right")
         }
     }
 
@@ -200,10 +206,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if panel.ignoresMouseEvents { panel.ignoresMouseEvents = false }
         case .hover:
             // 悬停恢复：鼠标在球上时响应（可拖拽），否则穿透
-            let inside = panel.frame.contains(NSEvent.mouseLocation)
+            let mouse = NSEvent.mouseLocation
+            let inside = panel.frame.contains(mouse)
             let shouldIgnore = !panel.isDragging && !inside
             if panel.ignoresMouseEvents != shouldIgnore {
                 panel.ignoresMouseEvents = shouldIgnore
+                appLog.info("hover -> ignoresMouseEvents=\(shouldIgnore)")
             }
         }
     }
