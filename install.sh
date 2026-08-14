@@ -31,28 +31,55 @@ ok()    { printf "\033[1;32m[ok]\033[0m   %s\n" "$1"; }
 warn()  { printf "\033[1;33m[warn]\033[0m %s\n" "$1"; }
 err()   { printf "\033[1;31m[error]\033[0m %s\n" "$1"; }
 
-# ---------------------------------------------------------------- 1. 检查 dsh
-if ! command -v dsh >/dev/null 2>&1; then
-    err "未检测到 DeepSeek Harness（dsh 命令不存在）。"
-    echo ""
-    echo "请先安装 DeepSeek Harness，然后再运行本脚本。"
-    echo "安装方法见：https://github.com/sundusk/mac-ballPet-DeepSeekHarness#-安装依赖"
-    exit 1
-fi
-ok "DeepSeek Harness 已安装：$(dsh --version 2>/dev/null | head -1 || echo '?')"
+# 定位 dsh 命令：curl|bash 的非交互 shell PATH 可能不含 npx 缓存路径，做多路回退
+find_dsh() {
+    command -v dsh 2>/dev/null && return 0
+    # npx 缓存里的 dsh（常见安装位置）
+    local cand
+    cand=$(ls -d "$HOME"/.npm/_npx/*/node_modules/.bin/dsh 2>/dev/null | head -1)
+    [ -n "$cand" ] && { echo "$cand"; return 0; }
+    return 1
+}
 
-# ---------------------------------------------------------------- 2. 检查插件
+# ---------------------------------------------------------------- 1. 检查插件（接口优先）
 info "检查 dsh-waterball 插件是否已安装……"
 if curl -fsS -m 2 "$STATUS_URL" >/dev/null 2>&1; then
     ok "插件已就绪（$STATUS_URL 可访问）"
+    HAS_PLUGIN=1
 else
-    warn "状态接口不可达，尝试安装插件……"
+    warn "状态接口不可达（DSH 未启动，或插件未安装）。"
+    HAS_PLUGIN=0
+fi
+
+# ---------------------------------------------------------------- 2. 检查 dsh（仅装插件时需要）
+DSH_BIN=""
+if [ "$HAS_PLUGIN" = "1" ]; then
+    # 插件已就绪：装 app 不需要 dsh 命令，跳过检测
+    if DSH_BIN=$(find_dsh); then
+        ok "DeepSeek Harness 已安装（$(basename "$DSH_BIN")）"
+    else
+        ok "插件已就绪，跳过 dsh 检测（安装 app 不需要 dsh 命令）"
+    fi
+else
+    if DSH_BIN=$(find_dsh); then
+        ok "DeepSeek Harness 已安装：$("$DSH_BIN" --version 2>/dev/null | head -1 || echo '?')"
+    else
+        err "未检测到 DeepSeek Harness（dsh 命令不存在，且未在常见位置找到）。"
+        echo ""
+        echo "请先安装并启动 DeepSeek Harness，然后再运行本脚本。"
+        echo "安装方法见：https://github.com/sundusk/mac-ballPet-DeepSeekHarness#-安装依赖"
+        echo "（提示：curl|bash 的子 shell 可能读不到你 shell 里配置的 PATH，"
+        echo "  如 dsh 可运行，可先 source 你的 shell 配置或改用：bash install.sh）"
+        exit 1
+    fi
+
+    # 插件不可用且 dsh 就绪 → 自动装插件
     if ! command -v pnpm >/dev/null 2>&1 && ! command -v node >/dev/null 2>&1; then
         err "未检测到 Node.js/pnpm，无法自动安装插件。"
         echo "请先安装 Node.js（https://nodejs.org），再运行本脚本。"
         exit 1
     fi
-    if ! dsh plugin --profile web add "$PLUGIN_SPEC" 2>&1; then
+    if ! "$DSH_BIN" plugin --profile web add "$PLUGIN_SPEC" 2>&1; then
         err "插件安装失败。请手动执行："
         echo "  dsh plugin --profile web add $PLUGIN_SPEC"
         echo "然后重启 dsh web。"
