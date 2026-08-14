@@ -16,6 +16,8 @@ struct WaterballView: View {
             let scale = 0.90 + 0.14 * wave
             let opacity = 0.55 + 0.45 * wave
             let d = model.ballSize
+            // 眨眼：每 4 秒眨一次，闭眼 0.12s（快）+ 睁眼 0.18s（慢），其余时间全睁
+            let eyeScale = Self.blinkScale(at: t)
 
             ZStack {
                 // 外发光
@@ -52,16 +54,18 @@ struct WaterballView: View {
                     .blendMode(.screen)
 
                 // 眼睛：两个竖椭圆（与网页版水球一致的比例，120 viewBox 下 cx=46/74, rx=6, ry=11）
-                // 可在设置面板「外观」里关闭，颜色可切黑白
+                // 可在设置面板「外观」里关闭，颜色可切黑白；带眨眼动画（竖向缩放）
                 if SettingsStore.shared.showEyes {
                     Ellipse()
                         .fill(SettingsStore.shared.eyeColor.color)
                         .frame(width: d * 0.10, height: d * 0.183)
                         .offset(x: -d * 0.117, y: 0)
+                        .scaleEffect(x: 1, y: eyeScale, anchor: .center)
                     Ellipse()
                         .fill(SettingsStore.shared.eyeColor.color)
                         .frame(width: d * 0.10, height: d * 0.183)
                         .offset(x: d * 0.117, y: 0)
+                        .scaleEffect(x: 1, y: eyeScale, anchor: .center)
                 }
 
                 // stopped 是纯黑球，在深色壁纸上几乎不可见 → 加一圈淡环便于辨认
@@ -79,6 +83,25 @@ struct WaterballView: View {
         .allowsHitTesting(true)
         .contentShape(Circle()) // 只在球体/光晕圆形区域内响应拖拽，四个角不挡操作
         .gesture(dragGesture)
+    }
+
+    /// 眨眼竖向缩放：周期 4s，闭眼 0.12s（快）+ 睁眼 0.18s（慢），其余全睁（1.0）。
+    /// 返回 0.08...1.0 的竖向缩放值，越小眼睛越「闭」。
+    static func blinkScale(at t: TimeInterval) -> CGFloat {
+        let period: TimeInterval = 4.0
+        let closeDur: TimeInterval = 0.12
+        let openDur: TimeInterval = 0.18
+        let phase = t.truncatingRemainder(dividingBy: period)
+        if phase < closeDur {
+            // 闭眼：从 1 → 0.08（线性，快）
+            return CGFloat(1.0 - phase / closeDur * 0.92)
+        }
+        if phase < closeDur + openDur {
+            // 睁眼：从 0.08 → 1（线性，稍慢）
+            let p = (phase - closeDur) / openDur
+            return CGFloat(0.08 + p * 0.92)
+        }
+        return 1.0
     }
 
     /// 拖拽：让窗口跟随鼠标的全局位置（抓取点保持在光标下），

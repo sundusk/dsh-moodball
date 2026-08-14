@@ -58,16 +58,23 @@ private struct PreviewBall: View {
                 .fill(RadialGradient(colors: [color, color.opacity(0.75)], center: .topLeading, startRadius: 0, endRadius: d))
                 .frame(width: d, height: d)
                 .shadow(color: color.opacity(0.8), radius: d * 0.16)
-            // 眼睛：与主球一致（竖椭圆），跟随「显示眼睛」设置与眼睛颜色
+            // 眼睛：与主球一致（竖椭圆），跟随「显示眼睛」设置与眼睛颜色；带眨眼动画
             if settings.showEyes {
-                Ellipse()
-                    .fill(settings.eyeColor.color)
-                    .frame(width: d * 0.10, height: d * 0.183)
-                    .offset(x: -d * 0.117, y: 0)
-                Ellipse()
-                    .fill(settings.eyeColor.color)
-                    .frame(width: d * 0.10, height: d * 0.183)
-                    .offset(x: d * 0.117, y: 0)
+                TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { timeline in
+                    let eyeScale = WaterballView.blinkScale(at: timeline.date.timeIntervalSinceReferenceDate)
+                    ZStack {
+                        Ellipse()
+                            .fill(settings.eyeColor.color)
+                            .frame(width: d * 0.10, height: d * 0.183)
+                            .offset(x: -d * 0.117, y: 0)
+                            .scaleEffect(x: 1, y: eyeScale, anchor: .center)
+                        Ellipse()
+                            .fill(settings.eyeColor.color)
+                            .frame(width: d * 0.10, height: d * 0.183)
+                            .offset(x: d * 0.117, y: 0)
+                            .scaleEffect(x: 1, y: eyeScale, anchor: .center)
+                    }
+                }
             }
             // 高光
             Circle()
