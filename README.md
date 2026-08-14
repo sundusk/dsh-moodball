@@ -4,6 +4,16 @@ macOS 原生悬浮呼吸灯：菜单栏常驻 + 一颗置顶的发光小球，�
 「DeepSeek Harness」的 agent 状态变化并呼吸（思考中=绿、调工具=紫、完成=青、
 出错=红…共 7 色，颜色可在设置面板自定义）。
 
+> macOS 14+ · SwiftUI 原生应用 · 需要 DeepSeek Harness（DSH）运行
+>
+> [下载最新 Release](https://github.com/sundusk/mac-ballPet-DeepSeekHarness/releases/latest) · [查看 v0.1.0](https://github.com/sundusk/mac-ballPet-DeepSeekHarness/releases/tag/v0.1.0)
+
+## 项目定位
+
+这是一个面向 DeepSeek Harness 的 macOS 配套应用（companion app），不是可以直接通过
+`dsh plugin add` 安装的独立插件。它依赖 `dsh-waterball-pet` 插件提供 agent 状态接口，
+再在桌面菜单栏和悬浮球中显示状态。
+
 ```
 DeepSeek Harness 进程 → dsh-waterball 插件（监听 agent 事件，提供状态接口）
                            → /api/waterball/status → 桌面球 700ms 轮询变色
@@ -16,6 +26,9 @@ DeepSeek Harness 进程 → dsh-waterball 插件（监听 agent 事件，提供�
 1. **macOS 14+**
 2. **DeepSeek Harness**：安装方法见 [DeepSeek Harness 官方文档](https://github.com/sundusk/dsh-waterball-pet)，装好后终端能运行 `dsh web`
 3. **Node.js + pnpm**（一键脚本自动装插件时需要）：https://nodejs.org
+
+普通用户推荐直接下载 [最新 Release](https://github.com/sundusk/mac-ballPet-DeepSeekHarness/releases/latest)
+中的 `Waterball.app.zip`；开发者或希望自动安装依赖的用户可以使用下面的一键安装脚本。
 
 ### 一键安装（推荐）
 
@@ -215,3 +228,6 @@ waterball-mac/
 - 日志：`log show --predicate 'subsystem == "com.linxin666.waterball-mac"'`（info 级，
   含轮询位置与显隐切换，便于排查）。
 
+## License
+
+本项目采用 [MIT License](LICENSE) 发布。
