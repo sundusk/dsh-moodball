@@ -13,10 +13,10 @@
 #   - Node.js + pnpm（安装插件时用到）
 #
 # 用法：
-#   curl -fsSL https://raw.githubusercontent.com/sundusk/mac-ballpet-deepseekharness/main/install.sh | bash
+#   curl -fsSL https://github.com/sundusk/mac-ballpet-deepseekharness/raw/refs/heads/main/install.sh | bash
 #   或下载后本地执行：./install.sh
-#   注：raw.githubusercontent.com 对混合大小写仓库名有缓存问题（可能间歇 404），
-#       故 URL 统一用全小写仓库名（GitHub 仓库名大小写不敏感）。
+#   注：raw.githubusercontent.com 的 CDN 对最近提交有缓存滞后（可能拿到旧版脚本），
+#       故用 github.com/.../raw/refs/heads/main/... 路径（内部走 API 重定向，更及时）。
 # =============================================================================
 set -euo pipefail
 

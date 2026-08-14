@@ -20,7 +20,7 @@ DeepSeek Harness 进程 → dsh-waterball 插件（监听 agent 事件，提供�
 ### 一键安装
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sundusk/mac-ballpet-deepseekharness/main/install.sh | bash
+curl -fsSL https://github.com/sundusk/mac-ballpet-deepseekharness/raw/refs/heads/main/install.sh | bash
 ```
 
 脚本会自动：
