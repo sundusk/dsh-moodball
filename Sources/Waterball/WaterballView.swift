@@ -51,15 +51,15 @@ struct WaterballView: View {
                     .frame(width: d * 0.82, height: d * 0.82)
                     .blendMode(.screen)
 
-                // 眼睛：两个白色竖椭圆（与网页版水球一致的比例，120 viewBox 下 cx=46/74, rx=6, ry=11）
-                // 可在设置面板「外观」里关闭
+                // 眼睛：两个竖椭圆（与网页版水球一致的比例，120 viewBox 下 cx=46/74, rx=6, ry=11）
+                // 可在设置面板「外观」里关闭，颜色可切黑白
                 if SettingsStore.shared.showEyes {
                     Ellipse()
-                        .fill(Color.white)
+                        .fill(SettingsStore.shared.eyeColor.color)
                         .frame(width: d * 0.10, height: d * 0.183)
                         .offset(x: -d * 0.117, y: 0)
                     Ellipse()
-                        .fill(Color.white)
+                        .fill(SettingsStore.shared.eyeColor.color)
                         .frame(width: d * 0.10, height: d * 0.183)
                         .offset(x: d * 0.117, y: 0)
                 }

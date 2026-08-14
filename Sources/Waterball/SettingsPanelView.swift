@@ -58,14 +58,14 @@ private struct PreviewBall: View {
                 .fill(RadialGradient(colors: [color, color.opacity(0.75)], center: .topLeading, startRadius: 0, endRadius: d))
                 .frame(width: d, height: d)
                 .shadow(color: color.opacity(0.8), radius: d * 0.16)
-            // 眼睛：与主球一致（白色竖椭圆），跟随「显示眼睛」设置
+            // 眼睛：与主球一致（竖椭圆），跟随「显示眼睛」设置与眼睛颜色
             if settings.showEyes {
                 Ellipse()
-                    .fill(Color.white)
+                    .fill(settings.eyeColor.color)
                     .frame(width: d * 0.10, height: d * 0.183)
                     .offset(x: -d * 0.117, y: 0)
                 Ellipse()
-                    .fill(Color.white)
+                    .fill(settings.eyeColor.color)
                     .frame(width: d * 0.10, height: d * 0.183)
                     .offset(x: d * 0.117, y: 0)
             }
@@ -123,6 +123,20 @@ private struct AppearanceTab: View {
                 get: { settings.showEyes },
                 set: { settings.showEyes = $0 }
             ))
+
+            LabeledContent("眼睛颜色") {
+                Picker("", selection: Binding(
+                    get: { settings.eyeColor },
+                    set: { settings.eyeColor = $0 }
+                )) {
+                    ForEach(EyeColor.allCases) { color in
+                        Text(color.label).tag(color)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: 140)
+            }
 
             Button("重置位置到右下角") {
                 NotificationCenter.default.post(name: .waterballResetPosition, object: nil)

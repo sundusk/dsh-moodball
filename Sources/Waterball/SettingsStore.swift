@@ -41,6 +41,29 @@ enum ClickThroughMode: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - 眼睛颜色（仅黑白两色）
+
+enum EyeColor: String, CaseIterable, Identifiable {
+    case white
+    case black
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .white: return "白色"
+        case .black: return "黑色"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .white: return .white
+        case .black: return .black
+        }
+    }
+}
+
 // MARK: - 全局设置（UserDefaults 持久化）
 
 @MainActor
@@ -59,6 +82,7 @@ final class SettingsStore: ObservableObject {
         static let clickThrough = "settings.clickThrough"
         static let rememberPosition = "settings.rememberPosition"
         static let showEyes = "settings.showEyes"
+        static let eyeColor = "settings.eyeColor"
         static let moodColorPrefix = "settings.moodColor."
     }
 
@@ -77,6 +101,11 @@ final class SettingsStore: ObservableObject {
     /// 是否显示水球眼睛（白色竖椭圆），默认开
     @Published var showEyes: Bool {
         didSet { defaults.set(showEyes, forKey: Key.showEyes) }
+    }
+
+    /// 眼睛颜色（仅黑白两色），默认白
+    @Published var eyeColor: EyeColor {
+        didSet { defaults.set(eyeColor.rawValue, forKey: Key.eyeColor) }
     }
 
     // MARK: 行为
@@ -131,6 +160,7 @@ final class SettingsStore: ObservableObject {
         clickThroughMode = ClickThroughMode(rawValue: d.string(forKey: Key.clickThrough) ?? "") ?? .hover
         rememberPosition = d.object(forKey: Key.rememberPosition) == nil ? true : d.bool(forKey: Key.rememberPosition)
         showEyes = d.object(forKey: Key.showEyes) == nil ? true : d.bool(forKey: Key.showEyes)
+        eyeColor = EyeColor(rawValue: d.string(forKey: Key.eyeColor) ?? "") ?? .white
         disconnectedColor = Color(hex: hexFromDefaults(d, key: Key.moodColorPrefix + "disconnected") ?? disconnectedHex)
 
         // 读 7 色（没存过就用契约默认值）
