@@ -13,8 +13,10 @@
 #   - Node.js + pnpm（安装插件时用到）
 #
 # 用法：
-#   curl -fsSL https://raw.githubusercontent.com/sundusk/mac-ballPet-DeepSeekHarness/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/sundusk/mac-ballpet-deepseekharness/main/install.sh | bash
 #   或下载后本地执行：./install.sh
+#   注：raw.githubusercontent.com 对混合大小写仓库名有缓存问题（可能间歇 404），
+#       故 URL 统一用全小写仓库名（GitHub 仓库名大小写不敏感）。
 # =============================================================================
 set -euo pipefail
 
