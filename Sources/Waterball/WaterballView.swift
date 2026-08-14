@@ -51,6 +51,16 @@ struct WaterballView: View {
                     .frame(width: d * 0.82, height: d * 0.82)
                     .blendMode(.screen)
 
+                // 眼睛：两个白色竖椭圆（与网页版水球一致的比例，120 viewBox 下 cx=46/74, rx=6, ry=11）
+                Ellipse()
+                    .fill(Color.white)
+                    .frame(width: d * 0.10, height: d * 0.183)
+                    .offset(x: -d * 0.117, y: 0)
+                Ellipse()
+                    .fill(Color.white)
+                    .frame(width: d * 0.10, height: d * 0.183)
+                    .offset(x: d * 0.117, y: 0)
+
                 // stopped 是纯黑球，在深色壁纸上几乎不可见 → 加一圈淡环便于辨认
                 if model.mood == "stopped" {
                     Circle()

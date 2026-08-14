@@ -53,21 +53,31 @@ private struct PreviewBall: View {
     var body: some View {
         let d = settings.ballSize
         let color = settings.moodColors["jumping"] ?? .purple
-        Circle()
-            .fill(RadialGradient(colors: [color, color.opacity(0.75)], center: .topLeading, startRadius: 0, endRadius: d))
-            .frame(width: d, height: d)
-            .shadow(color: color.opacity(0.8), radius: d * 0.16)
-            .overlay(
-                Circle()
-                    .fill(RadialGradient(colors: [Color.white.opacity(0.6), Color.white.opacity(0)], center: UnitPoint(x: 0.35, y: 0.28), startRadius: 0, endRadius: d * 0.6))
-                    .frame(width: d * 0.82, height: d * 0.82)
-                    .blendMode(.screen)
-            )
-            .scaleEffect(phase ? 1.05 : 0.95)
-            .opacity(phase ? 1.0 : 0.6)
-            .animation(.easeInOut(duration: settings.breathingSpeed).repeatForever(autoreverses: true), value: phase)
-            .onAppear { phase = true }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        ZStack {
+            Circle()
+                .fill(RadialGradient(colors: [color, color.opacity(0.75)], center: .topLeading, startRadius: 0, endRadius: d))
+                .frame(width: d, height: d)
+                .shadow(color: color.opacity(0.8), radius: d * 0.16)
+            // 眼睛：与主球一致（白色竖椭圆）
+            Ellipse()
+                .fill(Color.white)
+                .frame(width: d * 0.10, height: d * 0.183)
+                .offset(x: -d * 0.117, y: 0)
+            Ellipse()
+                .fill(Color.white)
+                .frame(width: d * 0.10, height: d * 0.183)
+                .offset(x: d * 0.117, y: 0)
+            // 高光
+            Circle()
+                .fill(RadialGradient(colors: [Color.white.opacity(0.6), Color.white.opacity(0)], center: UnitPoint(x: 0.35, y: 0.28), startRadius: 0, endRadius: d * 0.6))
+                .frame(width: d * 0.82, height: d * 0.82)
+                .blendMode(.screen)
+        }
+        .scaleEffect(phase ? 1.05 : 0.95)
+        .opacity(phase ? 1.0 : 0.6)
+        .animation(.easeInOut(duration: settings.breathingSpeed).repeatForever(autoreverses: true), value: phase)
+        .onAppear { phase = true }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
