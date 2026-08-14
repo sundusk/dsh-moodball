@@ -58,15 +58,17 @@ private struct PreviewBall: View {
                 .fill(RadialGradient(colors: [color, color.opacity(0.75)], center: .topLeading, startRadius: 0, endRadius: d))
                 .frame(width: d, height: d)
                 .shadow(color: color.opacity(0.8), radius: d * 0.16)
-            // 眼睛：与主球一致（白色竖椭圆）
-            Ellipse()
-                .fill(Color.white)
-                .frame(width: d * 0.10, height: d * 0.183)
-                .offset(x: -d * 0.117, y: 0)
-            Ellipse()
-                .fill(Color.white)
-                .frame(width: d * 0.10, height: d * 0.183)
-                .offset(x: d * 0.117, y: 0)
+            // 眼睛：与主球一致（白色竖椭圆），跟随「显示眼睛」设置
+            if settings.showEyes {
+                Ellipse()
+                    .fill(Color.white)
+                    .frame(width: d * 0.10, height: d * 0.183)
+                    .offset(x: -d * 0.117, y: 0)
+                Ellipse()
+                    .fill(Color.white)
+                    .frame(width: d * 0.10, height: d * 0.183)
+                    .offset(x: d * 0.117, y: 0)
+            }
             // 高光
             Circle()
                 .fill(RadialGradient(colors: [Color.white.opacity(0.6), Color.white.opacity(0)], center: UnitPoint(x: 0.35, y: 0.28), startRadius: 0, endRadius: d * 0.6))
@@ -116,6 +118,11 @@ private struct AppearanceTab: View {
             Text("周期越短呼吸越快。全局统一速度。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            Toggle("显示眼睛", isOn: Binding(
+                get: { settings.showEyes },
+                set: { settings.showEyes = $0 }
+            ))
 
             Button("重置位置到右下角") {
                 NotificationCenter.default.post(name: .waterballResetPosition, object: nil)

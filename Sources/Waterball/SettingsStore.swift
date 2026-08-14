@@ -58,6 +58,7 @@ final class SettingsStore: ObservableObject {
         static let requestTimeout = "settings.requestTimeout"
         static let clickThrough = "settings.clickThrough"
         static let rememberPosition = "settings.rememberPosition"
+        static let showEyes = "settings.showEyes"
         static let moodColorPrefix = "settings.moodColor."
     }
 
@@ -71,6 +72,11 @@ final class SettingsStore: ObservableObject {
     /// 呼吸周期（秒）0.5–5，默认 2.0（全局统一，简单优先）
     @Published var breathingSpeed: Double {
         didSet { defaults.set(breathingSpeed, forKey: Key.breathingSpeed) }
+    }
+
+    /// 是否显示水球眼睛（白色竖椭圆），默认开
+    @Published var showEyes: Bool {
+        didSet { defaults.set(showEyes, forKey: Key.showEyes) }
     }
 
     // MARK: 行为
@@ -124,6 +130,7 @@ final class SettingsStore: ObservableObject {
         requestTimeout = clamp(d.double(forKey: Key.requestTimeout) == 0 ? 2.0 : d.double(forKey: Key.requestTimeout), 0.5, 5)
         clickThroughMode = ClickThroughMode(rawValue: d.string(forKey: Key.clickThrough) ?? "") ?? .hover
         rememberPosition = d.object(forKey: Key.rememberPosition) == nil ? true : d.bool(forKey: Key.rememberPosition)
+        showEyes = d.object(forKey: Key.showEyes) == nil ? true : d.bool(forKey: Key.showEyes)
         disconnectedColor = Color(hex: hexFromDefaults(d, key: Key.moodColorPrefix + "disconnected") ?? disconnectedHex)
 
         // 读 7 色（没存过就用契约默认值）
