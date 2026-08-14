@@ -44,7 +44,8 @@ struct MenuBarContent: View {
 
             Divider()
 
-            Button("显示 / 隐藏悬浮球") {
+            // 标题随当前状态切换：显示中 →「隐藏悬浮球」，隐藏中 →「显示悬浮球」
+            Button(model.isBallVisible ? "隐藏悬浮球" : "显示悬浮球") {
                 model.isBallVisible.toggle()
             }
 
