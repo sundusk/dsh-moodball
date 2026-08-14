@@ -58,6 +58,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsSink: AnyCancellable?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // 单实例守卫：若已有同 Bundle ID 的实例在运行，本实例立即退出。
+        // （从 Spotlight/访达重复点击，或从不同路径副本启动时，防止出现多个悬浮球）
+        if Self.hasExistingInstance() {
+            appLog.info("detected existing instance, quitting")
+            NSApp.terminate(nil)
+            return
+        }
+
         // 纯菜单栏应用：不占 Dock
         NSApp.setActivationPolicy(.accessory)
 
@@ -268,5 +276,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         appLog.info("settings panel opened")
+    }
+
+    /// 是否已有同 Bundle ID 的其它实例在运行（用于单实例守卫）。
+    /// 找到任一其它实例即返回 true。
+    static func hasExistingInstance() -> Bool {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return false }
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .filter { $0.processIdentifier != ownPID }
+        return !others.isEmpty
     }
 }
