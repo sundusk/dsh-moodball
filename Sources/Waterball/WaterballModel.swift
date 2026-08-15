@@ -30,7 +30,7 @@ enum MoodColorMap {
         case "waiting":  return "正在思考中"
         case "jumping":  return "工具调用"
         case "authorizing": return "等待你的授权"
-        case "questioning": return "等待选择"
+        case "questioning": return "做出你的抉择"
         case "done":     return "搞定啦"
         case "failed":   return "出错"
         case "stopped":  return "已停止"

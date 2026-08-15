@@ -15,7 +15,7 @@ let moodColorConfigs: [MoodColorConfig] = [
     MoodColorConfig(mood: "waiting",      label: "正在思考中", defaultHex: 0x34d399), // 绿
     MoodColorConfig(mood: "jumping",      label: "工具调用", defaultHex: 0xa855f7), // 紫
     MoodColorConfig(mood: "authorizing",  label: "等待你的授权", defaultHex: 0xfacc15), // 黄
-    MoodColorConfig(mood: "questioning",  label: "等待选择", defaultHex: 0xec4899), // 粉
+    MoodColorConfig(mood: "questioning",  label: "做出你的抉择", defaultHex: 0xec4899), // 粉
     MoodColorConfig(mood: "done",         label: "搞定啦",   defaultHex: 0x22d3ee), // 青
     MoodColorConfig(mood: "failed",       label: "出错",   defaultHex: 0xf87171), // 红
     MoodColorConfig(mood: "stopped",      label: "已停止", defaultHex: 0x000000), // 黑
