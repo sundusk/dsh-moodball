@@ -6,6 +6,8 @@ cd "$(dirname "$0")"
 EXEC_NAME="Waterball"
 APP_NAME="Waterball"
 BUNDLE_ID="com.linxin666.waterball-mac"
+APP_VERSION="0.2.1"
+BUILD_VERSION="4"
 BUILD_DIR=".build/release"
 APP_DIR="dist/${APP_NAME}.app"
 ICON_SOURCE="Resources/water-ball-icon-1024.png"
@@ -43,7 +45,7 @@ sips -z 1024 1024 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_512x512@2x.png" >/dev/
 
 iconutil -c icns "$ICONSET_DIR" -o "$APP_DIR/Contents/Resources/Waterball.icns"
 
-cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
+cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -61,9 +63,9 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 	<key>CFBundleIconFile</key>
 	<string>Waterball</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.2.0</string>
+	<string>${APP_VERSION}</string>
 	<key>CFBundleVersion</key>
-	<string>3</string>
+	<string>${BUILD_VERSION}</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
