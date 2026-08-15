@@ -1,4 +1,4 @@
-# waterball-mac — macOS 悬浮呼吸灯
+# dsh-macDesktop-pet — macOS 桌面悬浮呼吸灯
 
 macOS 原生悬浮呼吸灯：菜单栏常驻 + 一颗置顶的发光小球，颜色随
 「DeepSeek Harness」的 agent 状态变化并呼吸（思考中=绿、调工具=紫、完成=青、
@@ -8,31 +8,25 @@ macOS 原生悬浮呼吸灯：菜单栏常驻 + 一颗置顶的发光小球，�
 >
 > [下载最新 Release](https://github.com/sundusk/dsh-macDesktop-pet/releases/latest) · [查看 v0.1.0](https://github.com/sundusk/dsh-macDesktop-pet/releases/tag/v0.1.0)
 
-## 项目定位
+## 🎈 这是什么？
 
-这是一个面向 DeepSeek Harness 的 macOS 配套应用（companion app），不是可以直接通过
-`dsh plugin add` 安装的独立插件。它依赖 `dsh-waterball-pet` 插件提供 agent 状态接口，
-再在桌面菜单栏和悬浮球中显示状态。
+把网页里的水球带到你的**整个桌面**上。安装后，桌面右下角会出现一颗置顶的发光小球，
+颜色随 DeepSeek Harness 的 Agent 运行状态实时呼吸变化——即使不看 Web UI，
+瞄一眼桌面就知道任务进度。
 
-```
-DeepSeek Harness 进程 → dsh-waterball 插件（监听 agent 事件，提供状态接口）
-                           → /api/waterball/status → 桌面球 700ms 轮询变色
-```
+它需要 DeepSeek Harness（`dsh web`）正在运行，并依赖
+[dsh-waterball-pet](https://github.com/sundusk/dsh-waterball-pet) 插件提供状态接口
+（下方一键安装脚本会自动帮你装好插件）。
 
-## 📦 安装（给新用户）
+## 🚀 安装
 
 ### 安装依赖
 
 1. **macOS 14+**
-2. **DeepSeek Harness**：安装方法见 [DeepSeek Harness 官方文档](https://github.com/sundusk/dsh-waterball-pet)，装好后终端能运行 `dsh web`
-3. **Node.js + pnpm**（一键脚本自动装插件时需要）：https://nodejs.org
+2. **DeepSeek Harness**：安装方法见 [官方文档](https://github.com/deepseek-ai/deepseek-harness)，装好后终端能运行 `dsh web`
+3. **Node.js + pnpm**（一键安装脚本自动装插件时需要）：https://nodejs.org
 
-普通用户推荐直接下载 [最新 Release](https://github.com/sundusk/dsh-macDesktop-pet/releases/latest)
-中的 `Waterball.app.zip`；开发者或希望自动安装依赖的用户可以使用下面的一键安装脚本。
-
-### 一键安装（推荐）
-
-**方式一：git clone（最稳定，永远是新版）**
+### 方式一：一键安装脚本（推荐）
 
 ```bash
 git clone --depth 1 https://github.com/sundusk/dsh-macDesktop-pet.git
@@ -40,196 +34,67 @@ cd dsh-macDesktop-pet
 bash install.sh
 ```
 
-**方式二：从 Release 下载脚本（按版本号寻址，无缓存问题）**
-
-```bash
-curl -fsSL https://github.com/sundusk/dsh-macDesktop-pet/releases/download/v0.1.0/install.sh | bash
-```
-
-> 注：`raw.githubusercontent.com` 的 CDN 对新提交有缓存滞后（可能拿到旧版脚本），
-> 不推荐直接用 raw 路径的 `curl | bash`。上面两种方式都能拿到最新脚本。
-
 脚本会自动：
-1. 检测 `/api/waterball/status` 接口，未装插件则自动执行 `dsh plugin --profile web add github:sundusk/dsh-waterball-pet`
-2. 有本地 `dist/` 构建产物则用本地；否则自动从 GitHub Release 下载 `Waterball.app`
+
+1. 检测状态接口，未装插件则自动执行 `dsh plugin --profile web add github:sundusk/dsh-waterball-pet`
+2. 从 GitHub Release 下载 `Waterball.app`（有本地构建产物时优先用本地）
 3. 把 `Waterball.app` 复制到 `/Applications` 并启动
 
-> 若脚本检测到刚安装了插件，会提示你先重启 `dsh web`（终端 Ctrl+C 后重新运行
-> `dsh web`），再重新执行脚本完成 app 安装。
+> 若脚本提示刚安装了插件，请先重启 `dsh web`（终端 Ctrl+C 后重新运行），
+> 再重新执行一次脚本完成 app 安装。
 
-### 手动安装（备选）
+### 方式二：下载 Release
 
-```bash
-# 1. 装插件（状态接口的生产者）
-dsh plugin --profile web add github:sundusk/dsh-waterball-pet
-# 2. 重启 dsh web
-# 3. 构建并运行桌面球
-./make-app.sh   # 或直接打开 dist/Waterball.app
-```
+从 [最新 Release](https://github.com/sundusk/dsh-macDesktop-pet/releases/latest)
+下载 `Waterball.app.zip`，解压后拖入「应用程序」文件夹，双击「Waterball」启动。
 
-### 🚀 启动与使用
+> 提示：Release 安装不会自动装插件。若尚未安装，请先在终端执行
+> `dsh plugin --profile web add github:sundusk/dsh-waterball-pet`，然后重启 `dsh web`。
 
-安装并启动后，**桌面上没有任何窗口**——它是个纯菜单栏应用（不占 Dock、不抢焦点），
-只在菜单栏右侧出现一个**彩色圆点图标**，桌面右下角出现发光呼吸球。
+## ✨ 使用
 
-**退出之后怎么再打开？**
+安装并启动后，**桌面上没有任何窗口**——它是个纯菜单栏应用（不占 Dock、不抢焦点）：
+菜单栏右侧出现一个**彩色圆点图标**，桌面右下角出现发光呼吸球。
+
+### 以后怎么打开？
 
 - **Spotlight**（最快）：按 `⌘ + 空格`，输入「Waterball」，回车
 - **访达 → 应用程序**：找到「Waterball」，双击
 - **终端**：`open -a Waterball`
 
-**菜单栏图标功能**（点开小圆点）：
+### 菜单栏图标功能
 
 | 菜单项 | 功能 |
 |---|---|
-| 状态文字 | 当前连接状态与 mood（如「已连接 · 工具调用」） |
-| 隐藏/显示悬浮球 | 开关随当前状态切换文字 |
+| 状态文字 | 当前连接状态与状态名（如「已连接 · 工具调用」） |
+| 隐藏 / 显示悬浮球 | 开关悬浮球显示 |
 | 设置… | 打开设置面板 |
-| 退出 | 退出 app（不会影响 DSH 本体） |
+| 退出 | 退出 app（不影响 DSH 本体） |
 
-**常见问题**
+### 颜色含义
+
+| 状态 | 颜色 |
+|---|---|
+| 空闲 | 蓝 |
+| 思考 / 工作 | 绿 |
+| 工具调用 | 紫 |
+| 授权等待 | 黄 |
+| 完成 | 青 |
+| 出错 | 红 |
+| 停止 / 中断 | 黑 |
+
+断连时球显示为灰色。所有颜色都可在设置面板自定义。
+
+### 设置面板
+
+菜单栏 →「设置…」可调整：球大小、呼吸速度、7 种状态颜色、眼睛开关与颜色、
+API 地址、轮询间隔、点击穿透模式等，修改立即生效。
+
+### 常见问题
 
 - **球是灰色的？** 说明 DSH 未运行（显示「DSH 未运行」）或插件被禁用（显示「插件已关闭」）。先确认终端里 `dsh web` 在跑。
 - **想同时看到网页水球？** 插件默认隐藏网页球，Web UI → 设置 → 插件 → 水球宠物 → 关闭「隐藏网页水球」。
-- **球的颜色代表什么？** 空闲=蓝、思考=绿、调工具=紫、完成=青、出错=红、停止=黑（可自定义）。
 
-### 安装后
-
-- 桌面右下角出现发光呼吸球，随 agent 状态变色呼吸
-- **插件默认隐藏网页端水球**（接口常驻），想同时在网页看到水球：
-  Web UI → 设置 → 插件 → 水球宠物 → 关闭「隐藏网页水球」
-- 菜单栏图标：显示/隐藏悬浮球、打开设置面板、退出
-- 设置面板：球大小/呼吸速度/7 色自定义/眼睛开关与颜色/API 地址/轮询间隔/穿透模式
-
-### 从源码构建
-
-```bash
-./make-app.sh   # swift build -c release → 组装 dist/Waterball.app → open 启动
-./run.sh        # 开发模式：直接 swift run
-```
-
----
-
-## 开发文档（交接）
-
-以下为原交接文档内容，供二次开发参考。
-
-## 数据来源（已就绪，无需再开发）
-
-DSH 本机已有一个 HTTP 接口（由 `dsh-waterball` 插件提供，见下文），直接轮询它：
-
-```
-GET http://127.0.0.1:3080/api/waterball/status
-→ {"ok":true,"mood":"waiting","enabled":true,"size":120,"right":16,"bottom":16}
-```
-
-- 本机 loopback，只有 DSH 开着时才可用；DSH 关闭时接口 404/连接失败 → 悬浮灯显示「未连接」。
-- 建议每 **700ms** 轮询一次（和网页插件一致）。
-
-## mood → 颜色映射（7 个状态，唯一要遵守的契约）
-
-| mood | 含义 | 颜色 |
-|------|------|------|
-| `idle` | 空闲 | 蓝 `#60a5fa` |
-| `waiting` | 思考/工作 | 绿 `#34d399` |
-| `jumping` | 工具调用 | 紫 `#a855f7` |
-| `authorizing` | 授权等待（approval/asked） | 黄 `#facc15` |
-| `done` | 完成 | 青 `#22d3ee` |
-| `failed` | 出错 | 红 `#f87171` |
-| `stopped` | 中断/停止（aborted/blocked/max-tokens/interrupted） | 黑 `#000000` |
-
-> 注：网页端的 `waving`（点击挥手）是网页交互态，host 不产出、接口不返回，桌面球不含此色。
-
-## 悬浮窗需求（SwiftUI 都能原生做到）
-
-- **菜单栏常驻**：`MenuBarExtra`，点击图标呼出/隐藏悬浮窗、退出。
-- **置顶**：`NSWindow.level = .floating`。
-- **透明无边框**：只有发光球本体可见，背景全透明。
-- **可拖拽**：`isMovableByWindowBackground = true`。
-- **不挡操作**：空闲时可 `ignoresMouseEvents = true`（点击穿透）；悬停时恢复响应。
-- **呼吸动画**：球体透明度/缩放做 ease-in-out 呼吸（idle 慢、忙碌态快）。
-- **未连接**：接口不可达时显示灰色「未连接」。
-
-## 技术选型（二选一）
-
-1. **SwiftUI 原生（推荐）**：最轻量，常驻内存极小。发光球用
-   `Circle + radialGradient + blur` 即可实现。
-2. **Tauri（Rust + WebView）**：能直接复用网页版水球 HTML/CSS，但要 Rust 工具链。
-
-## 网页插件（状态的生产者）
-
-- 仓库：`github.com/sundusk/dsh-waterball-pet`（含已构建的 `lib/`，GitHub 直接安装）
-- 安装：`dsh plugin --profile web add github:sundusk/dsh-waterball-pet`
-- 职责：Host 半区监听 agent 活动 → 产出 `mood` → 暴露 `/api/waterball/status`
-- 特性：`hidden` 开关（初始默认隐藏网页球，仅隐藏网页渲染，接口常驻供桌面球使用）
-- 修改它：改源码后 `cd dsh-waterball-pet && pnpm build`，提交 `lib/` 后重新安装
-
-## 开工建议
-
-先做「纯发光小球」版本（菜单栏 + 置顶透明球 + 700ms 轮询 + 7 色呼吸），
-验证通了再考虑水球本体、用量读数、点击交互等。
-
----
-
-## ✅ 已实现（2026-08-14）—— 纯发光小球版
-
-SwiftUI 原生（技术选型 1），SwiftPM 可执行目标，无第三方依赖。
-
-### 运行方式
-
-```bash
-./make-app.sh   # swift build -c release → 组装 dist/Waterball.app → open 启动
-./run.sh        # 开发模式：直接 swift run（同样不占 Dock）
-```
-
-- 产物：`dist/Waterball.app`（`LSUIElement` 纯菜单栏应用，不占 Dock）。
-- 退出：菜单栏图标 →「退出」。
-
-### 已实现功能
-
-| 需求 | 实现 |
-|------|------|
-| 菜单栏常驻 | `MenuBarExtra`，圆点图标颜色随 mood 实时变化；菜单内显示当前状态、「显示 / 隐藏悬浮球」、「退出」 |
-| 置顶 | `NSPanel.level = .floating`（窗口层 layer=3） |
-| 透明无边框 | 无边框透明 panel，仅发光球可见（radialGradient + blur 外发光 + 高光） |
-| 700ms 轮询 | `Timer` 每 0.7s GET `/api/waterball/status`（间隔/超时/API 地址可设置）；DSH 未运行 → 灰球「DSH 未运行」，插件关闭(404) → 灰球「插件已关闭」 |
-| 7 色映射 | 严格按上方表格：idle 蓝 / waiting 绿 / jumping 紫 / authorizing 黄 / done 青 / failed 红 / stopped 黑；颜色可在设置面板自定义，断连灰也可调 |
-| 呼吸动画 | `TimelineView` 正弦驱动透明度(0.55→1) + 缩放(0.90→1.04)，全局统一呼吸速度（设置面板可调） |
-| 不挡操作 | 点击穿透三模式：悬停恢复（默认）/ 永远穿透 / 永不穿透（设置面板可选，100ms 全局鼠标位置轮询） |
-| 随便拖 | 按住球体任意位置即可拖动到任意位置/任意屏幕（SwiftUI `DragGesture` 抓取点跟随，1:1 平滑）；抬手即记住位置，重启后自动恢复（可关闭「记住位置」）；显示/隐藏后再显示也回到原位 |
-| 位置 | 启动时优先恢复上次拖拽位置（`UserDefaults`），否则放鼠标所在屏幕右下角（距边 16px）；显示器增删/分辨率变化自动收回可视区；面板可一键重置右下角 |
-| 设置面板 | 菜单栏「设置…」：外观（大小/呼吸速度）/ 颜色（7 色自定义 + 断连灰）/ 行为（API 地址/轮询/超时/穿透/记住位置）三 Tab，顶部实时预览小球；修改即生效并持久化 |
-
-### 目录结构
-
-```
-waterball-mac/
-├── Package.swift                      # swift-tools 5.10, macOS 14+
-├── make-app.sh / run.sh
-└── Sources/Waterball/
-    ├── WaterballApp.swift             # @main + MenuBarExtra（图标、菜单）
-    ├── SettingsStore.swift            # 全局设置（UserDefaults 持久化）+ 7 色映射 + 穿透模式
-    ├── SettingsPanelView.swift        # 设置面板（外观/颜色/行为三 Tab + 实时预览）
-    ├── WaterballModel.swift           # 可配置轮询、解码、mood→颜色/呼吸速度、两种灰球区分
-    ├── WaterballView.swift            # 发光球 + 呼吸动画 + 拖拽
-    └── AppDelegate.swift              # 悬浮 panel、置顶、穿透/拖拽、显隐、设置面板、显示器变化
-```
-
-### 实现备注
-
-- 悬浮球显隐通过 `WaterballModel.isBallVisible` 驱动（`NSApp.delegate` 在 SwiftUI 下是
-  `SwiftUI.AppDelegate` 包装类型，不能 `as? AppDelegate`，故不依赖它）。
-- 拖拽用 SwiftUI `DragGesture` + 全局鼠标坐标（`NSEvent.mouseLocation`）驱动窗口
-  `setFrameOrigin`：抓取点相对窗口的偏移保持不变，窗口 1:1 跟随光标，不受窗口移动的
-  坐标系反馈影响（`isMovableByWindowBackground` 在 NSHostingView 下实测无效）。
-- 设置面板通过通知路由到 AppDelegate（`NSApp.delegate` 是 `SwiftUI.AppDelegate` 包装类型，
-  不能直接 `as? AppDelegate`）；面板打开时临时 `NSApp.activate` 以便输入框可编辑。
-- 球已与网页解耦：大小由本地设置决定（不再跟随接口 `size`）；接口 `hidden` 字段（网页球隐藏）
-  不影响桌面球——只要 `enabled=true` 且接口可达，桌面球照常工作。
-- `stopped` 是纯黑球，深色壁纸上加了一圈淡白描边便于辨认。
-- 日志：`log show --predicate 'subsystem == "com.linxin666.waterball-mac"'`（info 级，
-  含轮询位置与显隐切换，便于排查）。
-
-## License
+## 📄 License
 
 本项目采用 [MIT License](LICENSE) 发布。
