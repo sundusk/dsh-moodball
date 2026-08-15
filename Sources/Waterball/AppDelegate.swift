@@ -57,6 +57,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var visibilitySink: AnyCancellable?
     private var settingsSink: AnyCancellable?
     private var bubbleSink: AnyCancellable?
+    private var statusItem: NSStatusItem?
+    private var statusSink: AnyCancellable?
+    private var statusHeaderItem: NSMenuItem?
+    private var toggleMenuItem: NSMenuItem?
+    private var lastIconColor: Color?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 单实例守卫：若已有同 Bundle ID 的实例在运行，本实例立即退出。
@@ -69,6 +74,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // 纯菜单栏应用：不占 Dock
         NSApp.setActivationPolicy(.accessory)
+
+        // 菜单栏彩色图标（NSStatusItem 非模板渲染）+ 标准主菜单
+        setupStatusItem()
+        setupMainMenu()
 
         setupPanel()
         model.start()
@@ -106,6 +115,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hoverTimer = nil
         bubbleSink?.cancel()
         bubbleSink = nil
+        statusSink?.cancel()
+        statusSink = nil
     }
 
     // MARK: - 悬浮窗
@@ -283,10 +294,141 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
     }
 
+    // MARK: - 菜单栏图标（NSStatusItem，非模板彩色渲染）
+
+    /// 创建菜单栏常驻图标。
+    /// 注意：SwiftUI 的 `MenuBarExtra` 会把 label 强制渲染成单色模板图片，
+    /// mood 颜色会丢失（看起来就是个黑点/白点），所以这里改用 AppKit 的
+    /// `NSStatusItem` + 自绘非模板图片，让圆球真正显示 mood 颜色。
+    private func setupStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        statusItem = item
+
+        // 菜单内容：状态行 + 显示/隐藏 + 设置… + 退出（与旧 MenuBarContent 一致）
+        let menu = NSMenu()
+
+        statusHeaderItem = NSMenuItem(title: model.statusText, action: nil, keyEquivalent: "")
+        statusHeaderItem?.isEnabled = false
+        menu.addItem(statusHeaderItem!)
+
+        menu.addItem(.separator())
+
+        toggleMenuItem = NSMenuItem(
+            title: model.isBallVisible ? "隐藏悬浮球" : "显示悬浮球",
+            action: #selector(toggleBallVisibility),
+            keyEquivalent: ""
+        )
+        toggleMenuItem?.target = self
+        menu.addItem(toggleMenuItem!)
+
+        let settingsItem = NSMenuItem(title: "设置…", action: #selector(toggleSettingsPanel), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+
+        menu.addItem(.separator())
+
+        let quitItem = NSMenuItem(title: "退出", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        quitItem.target = NSApp
+        menu.addItem(quitItem)
+
+        item.menu = menu
+
+        // mood 颜色 / 球显隐 / 状态文案变化 → 刷新图标与菜单
+        statusSink = model.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                // objectWillChange 在属性写入前发出，推迟到下一轮再读，保证拿到新值
+                Task { @MainActor [weak self] in
+                    self?.refreshStatusItem()
+                }
+            }
+        refreshStatusItem() // 初始绘制
+    }
+
+    /// 用最新状态刷新菜单栏图标与菜单文案。
+    private func refreshStatusItem() {
+        guard let item = statusItem else { return }
+        let color = model.color
+
+        // 颜色变化才重绘图片（轮询会高频触发 objectWillChange，避免每次都重建 NSImage）
+        if lastIconColor != color {
+            lastIconColor = color
+            let image = Self.makeStatusIcon(color: color)
+            item.button?.image = image
+            item.button?.image?.isTemplate = false
+            item.button?.imagePosition = .imageOnly
+            statusHeaderItem?.image = Self.makeStatusIcon(color: color, size: 10)
+        }
+
+        item.button?.toolTip = model.statusText
+        item.button?.setAccessibilityLabel(model.statusText)
+        statusHeaderItem?.title = model.statusText
+        toggleMenuItem?.title = model.isBallVisible ? "隐藏悬浮球" : "显示悬浮球"
+    }
+
+    @objc private func toggleBallVisibility() {
+        model.isBallVisible.toggle()
+    }
+
+    /// 自绘菜单栏图标：mood 颜色圆球 + 两只白色竖向椭圆眼睛。
+    /// `isTemplate = false`：不参与系统的模板染色，按原色显示。
+    private static func makeStatusIcon(color: Color, size: CGFloat = 14) -> NSImage {
+        NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
+            // 圆球
+            let ballRect = rect.insetBy(dx: size * 0.08, dy: size * 0.08)
+            NSColor(color).setFill()
+            NSBezierPath(ovalIn: ballRect).fill()
+
+            // 两只竖向椭圆眼睛（居中，随图标大小缩放）
+            NSColor.white.setFill()
+            let eyeW = size * 0.11
+            let eyeH = size * 0.47
+            let eyeGap = size * 0.19
+            let eyeY = rect.midY - eyeH / 2
+            let leftEyeX = rect.midX - eyeGap - eyeW
+            let rightEyeX = rect.midX + eyeGap
+            NSBezierPath(ovalIn: CGRect(x: leftEyeX, y: eyeY, width: eyeW, height: eyeH)).fill()
+            NSBezierPath(ovalIn: CGRect(x: rightEyeX, y: eyeY, width: eyeW, height: eyeH)).fill()
+            return true
+        }
+    }
+
+    // MARK: - 主菜单（手动补齐，替代 SwiftUI 自动生成的菜单）
+
+    /// 无 SwiftUI App 场景后手动建立标准主菜单：
+    /// 保证「设置…（⌘,）」与文本输入框的剪切/复制/粘贴等快捷键可用。
+    private func setupMainMenu() {
+        let mainMenu = NSMenu()
+
+        let appMenuItem = NSMenuItem()
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "关于 水球", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "设置…", action: #selector(toggleSettingsPanel), keyEquivalent: ",")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "退出 水球", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenuItem.submenu = appMenu
+        mainMenu.addItem(appMenuItem)
+
+        let editMenuItem = NSMenuItem()
+        let editMenu = NSMenu(title: "编辑")
+        editMenu.addItem(withTitle: "撤销", action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(withTitle: "重做", action: Selector(("redo:")), keyEquivalent: "Z")
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "复制", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenuItem.submenu = editMenu
+        mainMenu.addItem(editMenuItem)
+
+        NSApp.mainMenu = mainMenu
+    }
+
     // MARK: - 设置面板
 
     /// 打开/关闭设置面板（菜单栏「设置…」）
-    func toggleSettingsPanel() {
+    @objc func toggleSettingsPanel() {
         if let settingsPanel, settingsPanel.isVisible {
             settingsPanel.orderOut(nil)
             return
