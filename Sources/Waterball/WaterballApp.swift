@@ -15,14 +15,14 @@ struct WaterballApp: App {
     }
 }
 
-/// 菜单栏图标：状态色小球 + 两只竖向椭圆眼睛
+/// 菜单栏图标：黑色小球 + 两只竖向椭圆眼睛，确保在各种状态栏背景上可见
 struct MenuBarIcon: View {
     @ObservedObject private var model = WaterballModel.shared
 
     var body: some View {
         ZStack {
             Circle()
-                .fill(model.color)
+                .fill(.black)
 
             HStack(spacing: 2.2) {
                 Ellipse()

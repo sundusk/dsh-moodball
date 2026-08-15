@@ -92,7 +92,7 @@ else
 fi
 
 # ---------------------------------------------------------------- 3. 获取 app
-RELEASE_VERSION="v0.2.1"
+RELEASE_VERSION="v0.2.2"
 RELEASE_URL="https://github.com/sundusk/dsh-macDesktop-pet/releases/download/$RELEASE_VERSION/Waterball.app.zip"
 APP_TMP=""
 
