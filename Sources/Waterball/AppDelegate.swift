@@ -379,7 +379,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             path.appendOval(in: rect.insetBy(dx: size * 0.08, dy: size * 0.08))
             // 两只镂空小圆点眼睛：even-odd 填充把圆点挖成透明
             let eyeR = size * 0.08
-            let eyeGap = size * 0.20
+            let eyeGap = size * 0.16
             let eyeY = rect.midY
             path.appendOval(in: CGRect(x: rect.midX - eyeGap - eyeR, y: eyeY - eyeR, width: eyeR * 2, height: eyeR * 2))
             path.appendOval(in: CGRect(x: rect.midX + eyeGap - eyeR, y: eyeY - eyeR, width: eyeR * 2, height: eyeR * 2))
