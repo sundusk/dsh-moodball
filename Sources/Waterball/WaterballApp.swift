@@ -15,15 +15,27 @@ struct WaterballApp: App {
     }
 }
 
-/// 菜单栏图标：实心圆点，颜色跟随 mood
+/// 菜单栏图标：状态色小球 + 两只竖向椭圆眼睛
 struct MenuBarIcon: View {
     @ObservedObject private var model = WaterballModel.shared
 
     var body: some View {
-        Image(systemName: "circle.fill")
-            .font(.system(size: 12))
-            .foregroundStyle(model.color)
-            .accessibilityLabel(model.statusText)
+        ZStack {
+            Circle()
+                .fill(model.color)
+
+            HStack(spacing: 2.2) {
+                Ellipse()
+                    .fill(.white)
+                    .frame(width: 1.4, height: 7.2)
+                Ellipse()
+                    .fill(.white)
+                    .frame(width: 1.4, height: 7.2)
+            }
+        }
+        .frame(width: 13, height: 13)
+        .drawingGroup()
+        .accessibilityLabel(model.statusText)
     }
 }
 
