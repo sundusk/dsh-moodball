@@ -27,10 +27,10 @@ enum MoodColorMap {
     static func label(for mood: String) -> String {
         switch mood {
         case "idle":     return "空闲"
-        case "waiting":  return "思考中"
+        case "waiting":  return "正在思考中"
         case "jumping":  return "工具调用"
-        case "authorizing": return "授权等待"
-        case "done":     return "完成"
+        case "authorizing": return "等待你的授权"
+        case "done":     return "搞定啦"
         case "failed":   return "出错"
         case "stopped":  return "已停止"
         default:         return "未知"

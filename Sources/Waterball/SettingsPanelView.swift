@@ -149,7 +149,7 @@ private struct AppearanceTab: View {
                 get: { settings.showStatusBubble },
                 set: { settings.showStatusBubble = $0 }
             ))
-            Text("非空闲状态时在球上方显示漫画风状态提醒（思考中/工具调用…），空闲自动隐藏。")
+            Text("非空闲状态时在球上方显示漫画风状态提醒（正在思考中/工具调用…），空闲自动隐藏。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
