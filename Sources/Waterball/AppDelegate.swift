@@ -372,7 +372,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 自绘菜单栏图标：mood 颜色圆球 + 两只镂空小圆点眼睛（非模板图片）。
     /// `isTemplate = false`：不参与系统的模板染色，按原样显示。
-    private static func makeStatusIcon(color: Color, size: CGFloat = 18) -> NSImage {
+    private static func makeStatusIcon(color: Color, size: CGFloat = 22) -> NSImage {
         NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
             let path = NSBezierPath()
             // 圆球
