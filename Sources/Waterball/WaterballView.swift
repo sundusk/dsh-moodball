@@ -3,86 +3,119 @@ import SwiftUI
 /// 发光小球：radialGradient 本体 + blur 外发光 + 高光，
 /// 用 TimelineView 按 mood 周期做正弦呼吸（透明度 + 缩放，ease-in-out 平滑）。
 /// 附带拖拽手势：按住球体任意位置即可把整个悬浮窗拖到任何地方（位置会记住）。
+/// 非空闲状态时，在球脑门上方显示漫画风说话气泡（中文状态提醒），空闲时隐藏。
+/// 布局采用「球体底部锚定」：气泡出现时面板向上增高 bubbleHeight，球心距底边恒为
+/// ballSize，因此球的屏幕位置在气泡显隐切换时保持不变。
 struct WaterballView: View {
     @ObservedObject var model: WaterballModel
+    @ObservedObject private var settings: SettingsStore
+
+    init(model: WaterballModel, settings: SettingsStore) {
+        self.model = model
+        self.settings = settings
+    }
+
     /// 按下时鼠标与窗口原点的偏移（全局坐标），拖拽中保持不变
     @State private var grabOffset: CGSize = .zero
     @State private var hasGrabOffset = false
 
+    /// 状态气泡总高度（正文 30 + 尾巴 14），气泡出现时面板额外增高的量。
+    /// AppDelegate 同步用它计算面板高度。
+    static let bubbleHeight: CGFloat = 44
+    /// 气泡尾巴尖端与球头顶部的间距
+    static let tailGap: CGFloat = 4
+
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
-            let wave = (sin(t * 2.0 * .pi / model.breathingPeriod) + 1.0) / 2.0 // 0...1
-            let scale = 0.90 + 0.14 * wave
-            let opacity = 0.55 + 0.45 * wave
-            let d = model.ballSize
-            // 眨眼：每 4 秒眨一次，闭眼 0.12s（快）+ 睁眼 0.18s（慢），其余时间全睁
-            let eyeScale = Self.blinkScale(at: t)
+        let d = model.ballSize
+        let showBubble = model.bubbleText != nil && settings.showStatusBubble
 
-            ZStack {
-                // 外发光
-                Circle()
-                    .fill(RadialGradient(
-                        colors: [model.color.opacity(0.85), model.color.opacity(0.0)],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: d * 0.72
-                    ))
-                    .frame(width: d * 1.7, height: d * 1.7)
-                    .blur(radius: 10)
+        ZStack(alignment: .top) {
+            // —— 球体层：底部锚定（偏移 bubbleHeight），命中区收窄到球体圆形 ——
+            TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { timeline in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                let wave = (sin(t * 2.0 * .pi / model.breathingPeriod) + 1.0) / 2.0 // 0...1
+                let scale = 0.90 + 0.14 * wave
+                let opacity = 0.55 + 0.45 * wave
+                // 眨眼：每 4 秒眨一次，闭眼 0.12s（快）+ 睁眼 0.18s（慢），其余时间全睁
+                let eyeScale = Self.blinkScale(at: t)
 
-                // 球体本体
-                Circle()
-                    .fill(RadialGradient(
-                        colors: [model.color, model.color.opacity(0.75)],
-                        center: .topLeading,
-                        startRadius: 0,
-                        endRadius: d
-                    ))
-                    .frame(width: d, height: d)
-                    .shadow(color: model.color.opacity(0.8), radius: d * 0.16)
-
-                // 左上高光
-                Circle()
-                    .fill(RadialGradient(
-                        colors: [Color.white.opacity(0.65), Color.white.opacity(0.0)],
-                        center: UnitPoint(x: 0.35, y: 0.28),
-                        startRadius: 0,
-                        endRadius: d * 0.6
-                    ))
-                    .frame(width: d * 0.82, height: d * 0.82)
-                    .blendMode(.screen)
-
-                // 眼睛：两个竖椭圆（与网页版水球一致的比例，120 viewBox 下 cx=46/74, rx=6, ry=11）
-                // 可在设置面板「外观」里关闭，颜色可切黑白；带眨眼动画（竖向缩放）
-                if SettingsStore.shared.showEyes {
-                    Ellipse()
-                        .fill(SettingsStore.shared.eyeColor.color)
-                        .frame(width: d * 0.10, height: d * 0.183)
-                        .offset(x: -d * 0.117, y: 0)
-                        .scaleEffect(x: 1, y: eyeScale, anchor: .center)
-                    Ellipse()
-                        .fill(SettingsStore.shared.eyeColor.color)
-                        .frame(width: d * 0.10, height: d * 0.183)
-                        .offset(x: d * 0.117, y: 0)
-                        .scaleEffect(x: 1, y: eyeScale, anchor: .center)
-                }
-
-                // stopped 是纯黑球，在深色壁纸上几乎不可见 → 加一圈淡环便于辨认
-                if model.mood == "stopped" {
+                ZStack {
+                    // 外发光
                     Circle()
-                        .strokeBorder(Color.white.opacity(0.30), lineWidth: 2)
-                        .frame(width: d + 6, height: d + 6)
+                        .fill(RadialGradient(
+                            colors: [model.color.opacity(0.85), model.color.opacity(0.0)],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: d * 0.72
+                        ))
+                        .frame(width: d * 1.7, height: d * 1.7)
+                        .blur(radius: 10)
+
+                    // 球体本体
+                    Circle()
+                        .fill(RadialGradient(
+                            colors: [model.color, model.color.opacity(0.75)],
+                            center: .topLeading,
+                            startRadius: 0,
+                            endRadius: d
+                        ))
+                        .frame(width: d, height: d)
+                        .shadow(color: model.color.opacity(0.8), radius: d * 0.16)
+
+                    // 左上高光
+                    Circle()
+                        .fill(RadialGradient(
+                            colors: [Color.white.opacity(0.65), Color.white.opacity(0.0)],
+                            center: UnitPoint(x: 0.35, y: 0.28),
+                            startRadius: 0,
+                            endRadius: d * 0.6
+                        ))
+                        .frame(width: d * 0.82, height: d * 0.82)
+                        .blendMode(.screen)
+
+                    // 眼睛：两个竖椭圆（与网页版水球一致的比例，120 viewBox 下 cx=46/74, rx=6, ry=11）
+                    // 可在设置面板「外观」里关闭，颜色可切黑白；带眨眼动画（竖向缩放）
+                    if settings.showEyes {
+                        Ellipse()
+                            .fill(settings.eyeColor.color)
+                            .frame(width: d * 0.10, height: d * 0.183)
+                            .offset(x: -d * 0.117, y: 0)
+                            .scaleEffect(x: 1, y: eyeScale, anchor: .center)
+                        Ellipse()
+                            .fill(settings.eyeColor.color)
+                            .frame(width: d * 0.10, height: d * 0.183)
+                            .offset(x: d * 0.117, y: 0)
+                            .scaleEffect(x: 1, y: eyeScale, anchor: .center)
+                    }
+
+                    // stopped 是纯黑球，在深色壁纸上几乎不可见 → 加一圈淡环便于辨认
+                    if model.mood == "stopped" {
+                        Circle()
+                            .strokeBorder(Color.white.opacity(0.30), lineWidth: 2)
+                            .frame(width: d + 6, height: d + 6)
+                    }
+                }
+                .scaleEffect(scale)
+                .opacity(opacity)
+                .frame(width: d * 2.0, height: d * 2.0)
+            }
+            .frame(width: d * 2.0, height: d * 2.0)
+            .contentShape(Circle()) // 只在球体/光晕圆形区域内响应拖拽，四个角不挡操作
+            .offset(y: showBubble ? Self.bubbleHeight : 0)
+            .gesture(dragGesture)
+
+            // —— 状态气泡层：仅动画自身显隐，不影响布局（面板高度由外层瞬时切换）——
+            ZStack(alignment: .top) {
+                if showBubble, let text = model.bubbleText {
+                    SpeechBubble(text: text, color: model.color)
+                        .offset(y: d / 2 - Self.tailGap)
+                        .transition(.scale(scale: 0.8, anchor: .bottom).combined(with: .opacity))
                 }
             }
-            .scaleEffect(scale)
-            .opacity(opacity)
-            .frame(width: d * 2.0, height: d * 2.0)
+            .animation(.easeInOut(duration: 0.15), value: showBubble)
+            .allowsHitTesting(false)
         }
-        .frame(width: model.ballSize * 2.0, height: model.ballSize * 2.0)
-        .allowsHitTesting(true)
-        .contentShape(Circle()) // 只在球体/光晕圆形区域内响应拖拽，四个角不挡操作
-        .gesture(dragGesture)
+        .frame(width: d * 2.0, height: d * 2.0 + (showBubble ? Self.bubbleHeight : 0))
     }
 
     /// 眨眼竖向缩放：周期 4s，闭眼 0.12s（快）+ 睁眼 0.18s（慢），其余全睁（1.0）。
@@ -143,5 +176,66 @@ struct WaterballView: View {
                 panel.isDragging = false
                 panel.persistPosition()
             }
+    }
+}
+
+// MARK: - 状态气泡（漫画风说话框）
+
+/// 漫画风说话气泡：圆角矩形白底 + 状态色描边 + 底部小三角尾巴指向球脑门。
+struct SpeechBubble: View {
+    let text: String
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text(text)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.black.opacity(0.8))
+                .lineLimit(1)
+                .frame(height: 30)
+                .padding(.horizontal, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(.white.opacity(0.92))
+                        .shadow(color: .black.opacity(0.18), radius: 4, y: 2)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(color, lineWidth: 2)
+                )
+            BubbleTail(color: color)
+                .frame(width: 16, height: 14)
+        }
+        .fixedSize()
+    }
+}
+
+/// 气泡尾巴：白色小三角 + 两侧状态色描边（顶部与圆角矩形下缘相接，不封口）。
+struct BubbleTail: View {
+    let color: Color
+
+    var body: some View {
+        Triangle()
+            .fill(.white.opacity(0.92))
+            .overlay(
+                Path { p in
+                    p.move(to: CGPoint(x: 0, y: 0))
+                    p.addLine(to: CGPoint(x: 8, y: 14))
+                    p.addLine(to: CGPoint(x: 16, y: 0))
+                }
+                .stroke(color, lineWidth: 2)
+            )
+    }
+}
+
+/// 倒三角（尖端朝下）。
+struct Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.closeSubpath()
+        return path
     }
 }

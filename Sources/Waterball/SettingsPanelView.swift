@@ -145,6 +145,14 @@ private struct AppearanceTab: View {
                 .frame(width: 140)
             }
 
+            Toggle("显示状态气泡", isOn: Binding(
+                get: { settings.showStatusBubble },
+                set: { settings.showStatusBubble = $0 }
+            ))
+            Text("非空闲状态时在球上方显示漫画风状态提醒（思考中/工具调用…），空闲自动隐藏。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
             Button("重置位置到右下角") {
                 NotificationCenter.default.post(name: .waterballResetPosition, object: nil)
             }

@@ -56,6 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hoverTimer: Timer?
     private var visibilitySink: AnyCancellable?
     private var settingsSink: AnyCancellable?
+    private var bubbleSink: AnyCancellable?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 单实例守卫：若已有同 Bundle ID 的实例在运行，本实例立即退出。
@@ -74,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startHoverMonitor()
         observeVisibility()
         observeSettings()
+        observeBubble()
         // 显示器增删/分辨率变化时，把球收回可视区（避免被 macOS 甩到屏幕外）
         NotificationCenter.default.addObserver(
             self,
@@ -102,6 +104,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.stop()
         hoverTimer?.invalidate()
         hoverTimer = nil
+        bubbleSink?.cancel()
+        bubbleSink = nil
     }
 
     // MARK: - 悬浮窗
@@ -125,7 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.animationBehavior = .none
         panel.isExcludedFromWindowsMenu = true
 
-        let hosting = NSHostingView(rootView: WaterballView(model: model))
+        let hosting = NSHostingView(rootView: WaterballView(model: model, settings: SettingsStore.shared))
         hosting.wantsLayer = true
         hosting.layer?.backgroundColor = NSColor.clear.cgColor
         panel.contentView = hosting
@@ -178,18 +182,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - 设置联动
 
     private func observeSettings() {
-        // 球大小变化 → 保持中心不动地调整窗口尺寸
+        // 球大小变化 → 保持球心不动地调整窗口尺寸（含气泡增高）
         settingsSink = SettingsStore.shared.$ballSize
             .receive(on: RunLoop.main)
             .sink { [weak self] newSize in
                 guard let self, let panel = self.panel else { return }
-                let d = newSize * 2.0
-                let old = panel.frame
-                panel.setFrame(
-                    NSRect(x: old.midX - d / 2, y: old.midY - d / 2, width: d, height: d),
-                    display: true
-                )
+                let showBubble = self.showStatusBubble
+                panel.setFrame(self.panelFrame(ballSize: newSize, showBubble: showBubble), display: true)
                 appLog.info("ballSize changed -> \(Int(newSize))")
+            }
+    }
+
+    // MARK: - 状态气泡（面板增高联动）
+
+    /// 当前是否显示状态气泡（mood 非空闲且设置开关打开）
+    private var showStatusBubble: Bool {
+        model.bubbleText != nil && SettingsStore.shared.showStatusBubble
+    }
+
+    /// 依据球大小与气泡显隐计算面板 frame：保持球心（水平中心、距底边 = 球径）屏幕位置不变。
+    private func panelFrame(ballSize d: CGFloat, showBubble: Bool) -> NSRect {
+        let w = d * 2.0
+        let h = d * 2.0 + (showBubble ? WaterballView.bubbleHeight : 0)
+        let old = panel?.frame ?? NSRect(x: 0, y: 0, width: w, height: h)
+        let ballCenterX = old.midX
+        let ballCenterY = old.minY + old.width / 2 // 球心距底边 = 旧球径
+        return NSRect(x: ballCenterX - w / 2, y: ballCenterY - d, width: w, height: h)
+    }
+
+    private func observeBubble() {
+        // mood 变化（气泡显隐）或设置开关变化 → 增高/缩回面板顶部
+        let moodChanges: AnyPublisher<Void, Never> = model.$mood
+            .map { _ in () as Void }
+            .eraseToAnyPublisher()
+        let bubbleSetting: AnyPublisher<Void, Never> = SettingsStore.shared.$showStatusBubble
+            .map { _ in () as Void }
+            .eraseToAnyPublisher()
+        bubbleSink = Publishers.MergeMany(moodChanges, bubbleSetting)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self, let panel = self.panel else { return }
+                let showBubble = self.showStatusBubble
+                let frame = self.panelFrame(ballSize: SettingsStore.shared.ballSize, showBubble: showBubble)
+                if !frame.equalTo(panel.frame) {
+                    panel.setFrame(frame, display: true)
+                    appLog.info("panel frame -> \(Int(frame.width))x\(Int(frame.height)) bubble=\(showBubble)")
+                }
             }
     }
 
@@ -213,9 +251,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // 永不穿透：常驻响应（无穿透）
             if panel.ignoresMouseEvents { panel.ignoresMouseEvents = false }
         case .hover:
-            // 悬停恢复：鼠标在球上时响应（可拖拽），否则穿透
+            // 悬停恢复：鼠标在球体圆形区域（球心距底边 = 球径）内时响应（可拖拽），否则穿透。
+            // 面板在气泡出现时会向上增高，因此命中判定收窄到球体圆形，气泡区域保持点击穿透。
             let mouse = NSEvent.mouseLocation
-            let inside = panel.frame.contains(mouse)
+            let d = SettingsStore.shared.ballSize
+            let ballCenter = NSPoint(x: panel.frame.midX, y: panel.frame.minY + d)
+            let inside = hypot(mouse.x - ballCenter.x, mouse.y - ballCenter.y) <= d
             let shouldIgnore = !panel.isDragging && !inside
             if panel.ignoresMouseEvents != shouldIgnore {
                 panel.ignoresMouseEvents = shouldIgnore

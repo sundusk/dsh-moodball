@@ -83,6 +83,7 @@ final class SettingsStore: ObservableObject {
         static let rememberPosition = "settings.rememberPosition"
         static let showEyes = "settings.showEyes"
         static let eyeColor = "settings.eyeColor"
+        static let showStatusBubble = "settings.showStatusBubble"
         static let moodColorPrefix = "settings.moodColor."
     }
 
@@ -106,6 +107,11 @@ final class SettingsStore: ObservableObject {
     /// 眼睛颜色（仅黑白两色），默认白
     @Published var eyeColor: EyeColor {
         didSet { defaults.set(eyeColor.rawValue, forKey: Key.eyeColor) }
+    }
+
+    /// 状态气泡：非空闲时在球脑门上方显示中文状态提醒，默认开
+    @Published var showStatusBubble: Bool {
+        didSet { defaults.set(showStatusBubble, forKey: Key.showStatusBubble) }
     }
 
     // MARK: 行为
@@ -161,6 +167,7 @@ final class SettingsStore: ObservableObject {
         rememberPosition = d.object(forKey: Key.rememberPosition) == nil ? true : d.bool(forKey: Key.rememberPosition)
         showEyes = d.object(forKey: Key.showEyes) == nil ? true : d.bool(forKey: Key.showEyes)
         eyeColor = EyeColor(rawValue: d.string(forKey: Key.eyeColor) ?? "") ?? .white
+        showStatusBubble = d.object(forKey: Key.showStatusBubble) == nil ? true : d.bool(forKey: Key.showStatusBubble)
         disconnectedColor = Color(hex: hexFromDefaults(d, key: Key.moodColorPrefix + "disconnected") ?? disconnectedHex)
 
         // 读 7 色（没存过就用契约默认值）

@@ -72,6 +72,17 @@ final class WaterballModel: ObservableObject {
         }
     }
 
+    /// 状态气泡文字：空闲/断连/禁用时不显示；其余状态显示中文状态名（思考中/工具调用…）。
+    /// 由 WaterballView 渲染在球脑门上方，AppDelegate 监听 mood 变化同步面板高度。
+    var bubbleText: String? {
+        switch mood {
+        case "idle", "unreachable", "disabled":
+            return nil
+        default:
+            return moodLabel
+        }
+    }
+
     /// 悬浮球显隐（菜单栏「显示/隐藏」切换）
     @Published var isBallVisible = true
 
