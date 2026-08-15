@@ -6,7 +6,7 @@ macOS 原生悬浮呼吸灯：菜单栏常驻 + 一颗置顶的发光小球，�
 
 > macOS 14+ · SwiftUI 原生应用 · 需要 DeepSeek Harness（DSH）运行
 >
-> [下载最新 Release](https://github.com/sundusk/mac-ballPet-DeepSeekHarness/releases/latest) · [查看 v0.1.0](https://github.com/sundusk/mac-ballPet-DeepSeekHarness/releases/tag/v0.1.0)
+> [下载最新 Release](https://github.com/sundusk/dsh-macDesktop-pet/releases/latest) · [查看 v0.1.0](https://github.com/sundusk/dsh-macDesktop-pet/releases/tag/v0.1.0)
 
 ## 项目定位
 
@@ -27,7 +27,7 @@ DeepSeek Harness 进程 → dsh-waterball 插件（监听 agent 事件，提供�
 2. **DeepSeek Harness**：安装方法见 [DeepSeek Harness 官方文档](https://github.com/sundusk/dsh-waterball-pet)，装好后终端能运行 `dsh web`
 3. **Node.js + pnpm**（一键脚本自动装插件时需要）：https://nodejs.org
 
-普通用户推荐直接下载 [最新 Release](https://github.com/sundusk/mac-ballPet-DeepSeekHarness/releases/latest)
+普通用户推荐直接下载 [最新 Release](https://github.com/sundusk/dsh-macDesktop-pet/releases/latest)
 中的 `Waterball.app.zip`；开发者或希望自动安装依赖的用户可以使用下面的一键安装脚本。
 
 ### 一键安装（推荐）
@@ -35,15 +35,15 @@ DeepSeek Harness 进程 → dsh-waterball 插件（监听 agent 事件，提供�
 **方式一：git clone（最稳定，永远是新版）**
 
 ```bash
-git clone --depth 1 https://github.com/sundusk/mac-ballpet-deepseekharness.git
-cd mac-ballpet-deepseekharness
+git clone --depth 1 https://github.com/sundusk/dsh-macDesktop-pet.git
+cd dsh-macDesktop-pet
 bash install.sh
 ```
 
 **方式二：从 Release 下载脚本（按版本号寻址，无缓存问题）**
 
 ```bash
-curl -fsSL https://github.com/sundusk/mac-ballpet-deepseekharness/releases/download/v0.1.0/install.sh | bash
+curl -fsSL https://github.com/sundusk/dsh-macDesktop-pet/releases/download/v0.1.0/install.sh | bash
 ```
 
 > 注：`raw.githubusercontent.com` 的 CDN 对新提交有缓存滞后（可能拿到旧版脚本），

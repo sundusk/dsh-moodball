@@ -13,7 +13,7 @@
 #   - Node.js + pnpm（安装插件时用到）
 #
 # 用法：
-#   curl -fsSL https://github.com/sundusk/mac-ballpet-deepseekharness/raw/refs/heads/main/install.sh | bash
+#   curl -fsSL https://github.com/sundusk/dsh-macDesktop-pet/raw/refs/heads/main/install.sh | bash
 #   或下载后本地执行：./install.sh
 #   注：raw.githubusercontent.com 的 CDN 对最近提交有缓存滞后（可能拿到旧版脚本），
 #       故用 github.com/.../raw/refs/heads/main/... 路径（内部走 API 重定向，更及时）。
@@ -67,7 +67,7 @@ else
         err "未检测到 DeepSeek Harness（dsh 命令不存在，且未在常见位置找到）。"
         echo ""
         echo "请先安装并启动 DeepSeek Harness，然后再运行本脚本。"
-        echo "安装方法见：https://github.com/sundusk/mac-ballPet-DeepSeekHarness#-安装依赖"
+        echo "安装方法见：https://github.com/sundusk/dsh-macDesktop-pet#-安装依赖"
         echo "（提示：curl|bash 的子 shell 可能读不到你 shell 里配置的 PATH，"
         echo "  如 dsh 可运行，可先 source 你的 shell 配置或改用：bash install.sh）"
         exit 1
@@ -93,7 +93,7 @@ fi
 
 # ---------------------------------------------------------------- 3. 获取 app
 RELEASE_VERSION="v0.1.0"
-RELEASE_URL="https://github.com/sundusk/mac-ballpet-deepseekharness/releases/download/$RELEASE_VERSION/Waterball.app.zip"
+RELEASE_URL="https://github.com/sundusk/dsh-macDesktop-pet/releases/download/$RELEASE_VERSION/Waterball.app.zip"
 APP_TMP=""
 
 # 优先用本地构建产物（开发者场景）；否则从 GitHub Release 下载（普通用户场景）
