@@ -58,7 +58,6 @@ bash install.sh
 
 ### 以后怎么打开？
 
-- **Spotlight**（最快）：按 `⌘ + 空格`，输入「Waterball」，回车
 - **访达 → 应用程序**：找到「Waterball」，双击
 - **终端**：`open -a Waterball`
 
