@@ -6,7 +6,7 @@ macOS 原生悬浮呼吸灯：菜单栏常驻 + 一颗置顶的发光小球，�
 
 > macOS 14+ · SwiftUI 原生应用 · 需要 DeepSeek Harness（DSH）运行
 >
-> [下载最新 Release](https://github.com/sundusk/dsh-macDesktop-pet/releases/latest) · [查看 v0.2.2](https://github.com/sundusk/dsh-macDesktop-pet/releases/tag/v0.2.2)
+> [下载最新 Release](https://github.com/sundusk/dsh-macDesktop-pet/releases/latest) · [查看 v0.2.0](https://github.com/sundusk/dsh-macDesktop-pet/releases/tag/v0.2.0)
 
 ## 🎈 这是什么？
 
