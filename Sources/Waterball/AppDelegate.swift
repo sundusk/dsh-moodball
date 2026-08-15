@@ -304,6 +304,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem = item
 
+        // 图标：纯黑圆球 + 镂空圆点眼睛（静态，不随 mood 变色）
+        let icon = Self.makeStatusIcon()
+        item.button?.image = icon
+        item.button?.image?.isTemplate = false
+        item.button?.imagePosition = .imageOnly
+
         // 菜单内容：状态行 + 显示/隐藏 + 设置… + 退出（与旧 MenuBarContent 一致）
         let menu = NSMenu()
 
@@ -345,19 +351,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshStatusItem() // 初始绘制
     }
 
-    /// 用最新状态刷新菜单栏图标与菜单文案。
+    /// 用最新状态刷新菜单栏菜单文案与菜单头部色点。
     private func refreshStatusItem() {
         guard let item = statusItem else { return }
         let color = model.color
 
-        // 颜色变化才重绘图片（轮询会高频触发 objectWillChange，避免每次都重建 NSImage）
+        // 菜单头部的状态色点：颜色变化才重绘（轮询会高频触发 objectWillChange，避免每次都重建 NSImage）
         if lastIconColor != color {
             lastIconColor = color
-            let image = Self.makeStatusIcon(color: color)
-            item.button?.image = image
-            item.button?.image?.isTemplate = false
-            item.button?.imagePosition = .imageOnly
-            statusHeaderItem?.image = Self.makeStatusIcon(color: color, size: 10)
+            statusHeaderItem?.image = Self.makeColoredDot(color: color, size: 10)
         }
 
         item.button?.toolTip = model.statusText
@@ -370,25 +372,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.isBallVisible.toggle()
     }
 
-    /// 自绘菜单栏图标：mood 颜色圆球 + 两只白色竖向椭圆眼睛。
-    /// `isTemplate = false`：不参与系统的模板染色，按原色显示。
-    private static func makeStatusIcon(color: Color, size: CGFloat = 14) -> NSImage {
+    /// 自绘菜单栏图标：纯黑圆球 + 两只镂空小圆点眼睛（非模板图片）。
+    /// `isTemplate = false`：不参与系统的模板染色，按原样显示。
+    private static func makeStatusIcon(size: CGFloat = 16) -> NSImage {
         NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
-            // 圆球
-            let ballRect = rect.insetBy(dx: size * 0.08, dy: size * 0.08)
-            NSColor(color).setFill()
-            NSBezierPath(ovalIn: ballRect).fill()
+            let path = NSBezierPath()
+            // 圆球（比旧版大一圈）
+            path.appendOval(in: rect.insetBy(dx: size * 0.08, dy: size * 0.08))
+            // 两只镂空小圆点眼睛：even-odd 填充把圆点挖成透明
+            let eyeR = size * 0.105
+            let eyeGap = size * 0.21
+            let eyeY = rect.midY
+            path.appendOval(in: CGRect(x: rect.midX - eyeGap - eyeR, y: eyeY - eyeR, width: eyeR * 2, height: eyeR * 2))
+            path.appendOval(in: CGRect(x: rect.midX + eyeGap - eyeR, y: eyeY - eyeR, width: eyeR * 2, height: eyeR * 2))
+            path.windingRule = .evenOdd
+            NSColor.black.setFill()
+            path.fill()
+            return true
+        }
+    }
 
-            // 两只竖向椭圆眼睛（居中，随图标大小缩放）
-            NSColor.white.setFill()
-            let eyeW = size * 0.11
-            let eyeH = size * 0.47
-            let eyeGap = size * 0.19
-            let eyeY = rect.midY - eyeH / 2
-            let leftEyeX = rect.midX - eyeGap - eyeW
-            let rightEyeX = rect.midX + eyeGap
-            NSBezierPath(ovalIn: CGRect(x: leftEyeX, y: eyeY, width: eyeW, height: eyeH)).fill()
-            NSBezierPath(ovalIn: CGRect(x: rightEyeX, y: eyeY, width: eyeW, height: eyeH)).fill()
+    /// 菜单头部的状态色点：纯色实心圆，颜色跟随 mood（菜单栏图标本体已固定为黑色）。
+    private static func makeColoredDot(color: Color, size: CGFloat = 10) -> NSImage {
+        NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
+            NSColor(color).setFill()
+            NSBezierPath(ovalIn: rect.insetBy(dx: size * 0.12, dy: size * 0.12)).fill()
             return true
         }
     }
