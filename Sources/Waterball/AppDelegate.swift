@@ -377,12 +377,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let path = NSBezierPath()
             // 圆球
             path.appendOval(in: rect.insetBy(dx: size * 0.08, dy: size * 0.08))
-            // 两只镂空小圆点眼睛：even-odd 填充把圆点挖成透明
-            let eyeR = size * 0.08
+            // 两只镂空竖向椭圆眼睛：even-odd 填充把椭圆挖成透明
+            let eyeW = size * 0.10
+            let eyeH = size * 0.20
             let eyeGap = size * 0.16
-            let eyeY = rect.midY
-            path.appendOval(in: CGRect(x: rect.midX - eyeGap - eyeR, y: eyeY - eyeR, width: eyeR * 2, height: eyeR * 2))
-            path.appendOval(in: CGRect(x: rect.midX + eyeGap - eyeR, y: eyeY - eyeR, width: eyeR * 2, height: eyeR * 2))
+            let eyeY = rect.midY - eyeH / 2
+            path.appendOval(in: CGRect(x: rect.midX - eyeGap - eyeW / 2, y: eyeY, width: eyeW, height: eyeH))
+            path.appendOval(in: CGRect(x: rect.midX + eyeGap - eyeW / 2, y: eyeY, width: eyeW, height: eyeH))
             path.windingRule = .evenOdd
             NSColor(color).setFill()
             path.fill()
