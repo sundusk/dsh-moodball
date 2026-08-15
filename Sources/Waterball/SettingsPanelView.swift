@@ -146,7 +146,7 @@ private struct AppearanceTab: View {
                 .frame(width: 140)
             }
 
-            Toggle("显示状态气泡", isOn: Binding(
+            Toggle("显示气泡文字", isOn: Binding(
                 get: { settings.showStatusBubble },
                 set: { settings.showStatusBubble = $0 }
             ))
