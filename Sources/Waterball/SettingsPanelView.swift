@@ -52,8 +52,8 @@ private struct PreviewBall: View {
 
     var body: some View {
         let d = settings.ballSize
-        // 预览小球固定为翠绿色（不跟随状态色）
-        let color = Color(hex: 0x00A86B)
+        // 预览小球固定为青色 RGB(0,255,255)（不跟随状态色）
+        let color = Color(hex: 0x00FFFF)
         ZStack {
             Circle()
                 .fill(RadialGradient(colors: [color, color.opacity(0.75)], center: .topLeading, startRadius: 0, endRadius: d))
