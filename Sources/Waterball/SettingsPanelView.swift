@@ -52,7 +52,8 @@ private struct PreviewBall: View {
 
     var body: some View {
         let d = settings.ballSize
-        let color = settings.moodColors["jumping"] ?? .purple
+        // 预览小球固定为墨绿色（不跟随状态色）
+        let color = Color(hex: 0x2E4D34)
         ZStack {
             Circle()
                 .fill(RadialGradient(colors: [color, color.opacity(0.75)], center: .topLeading, startRadius: 0, endRadius: d))
