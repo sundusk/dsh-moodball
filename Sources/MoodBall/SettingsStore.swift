@@ -100,7 +100,7 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(breathingSpeed, forKey: Key.breathingSpeed) }
     }
 
-    /// 是否显示水球眼睛（白色竖椭圆），默认开
+    /// 是否显示心情球眼睛（白色竖椭圆），默认开
     @Published var showEyes: Bool {
         didSet { defaults.set(showEyes, forKey: Key.showEyes) }
     }

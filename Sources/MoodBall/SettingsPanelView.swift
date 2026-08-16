@@ -62,7 +62,7 @@ private struct PreviewBall: View {
             // 眼睛：与主球一致（竖椭圆），跟随「显示眼睛」设置与眼睛颜色；带眨眼动画
             if settings.showEyes {
                 TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { timeline in
-                    let eyeScale = WaterballView.blinkScale(at: timeline.date.timeIntervalSinceReferenceDate)
+                    let eyeScale = MoodBallView.blinkScale(at: timeline.date.timeIntervalSinceReferenceDate)
                     ZStack {
                         Ellipse()
                             .fill(settings.eyeColor.color)

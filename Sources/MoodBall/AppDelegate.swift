@@ -7,10 +7,10 @@ private let appLog = Logger(subsystem: "com.linxin666.waterball-mac", category: 
 
 /// 置顶悬浮窗：透明、无边框、不抢焦点、点击穿透。
 /// 鼠标移入球体范围时恢复响应（可拖拽），移出后再次穿透。
-/// 拖拽由 SwiftUI 手势驱动（见 WaterballView），位置持久化到 UserDefaults。
-final class WaterballPanel: NSPanel {
+/// 拖拽由 SwiftUI 手势驱动（见 MoodBallView），位置持久化到 UserDefaults。
+final class MoodBallPanel: NSPanel {
     /// 供 SwiftUI 拖拽手势引用当前悬浮窗
-    static weak var current: WaterballPanel?
+    static weak var current: MoodBallPanel?
 
     /// 拖拽进行中（悬停检测据此保持响应，避免拖到一半变成点击穿透）
     var isDragging = false
@@ -50,8 +50,8 @@ final class WaterballPanel: NSPanel {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let model = WaterballModel.shared
-    private var panel: WaterballPanel?
+    private let model = MoodBallModel.shared
+    private var panel: MoodBallPanel?
     private var settingsPanel: NSPanel?
     private var hoverTimer: Timer?
     private var visibilitySink: AnyCancellable?
@@ -123,7 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupPanel() {
         let size = SettingsStore.shared.ballSize * 2.0
-        let panel = WaterballPanel(
+        let panel = MoodBallPanel(
             contentRect: NSRect(x: 0, y: 0, width: size, height: size),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -140,7 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.animationBehavior = .none
         panel.isExcludedFromWindowsMenu = true
 
-        let hosting = NSHostingView(rootView: WaterballView(model: model, settings: SettingsStore.shared))
+        let hosting = NSHostingView(rootView: MoodBallView(model: model, settings: SettingsStore.shared))
         hosting.wantsLayer = true
         hosting.layer?.backgroundColor = NSColor.clear.cgColor
         panel.contentView = hosting
@@ -149,7 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !panel.restoreSavedPosition() {
             positionAtBottomRight(panel)
         }
-        WaterballPanel.current = panel
+        MoodBallPanel.current = panel
         panel.orderFrontRegardless()
         self.panel = panel
     }
@@ -214,7 +214,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 依据球大小与气泡显隐计算面板 frame：保持球心（水平中心、距底边 = 球径）屏幕位置不变。
     private func panelFrame(ballSize d: CGFloat, showBubble: Bool) -> NSRect {
         let w = d * 2.0
-        let h = d * 2.0 + (showBubble ? WaterballView.bubbleHeight : 0)
+        let h = d * 2.0 + (showBubble ? MoodBallView.bubbleHeight : 0)
         let old = panel?.frame ?? NSRect(x: 0, y: 0, width: w, height: h)
         let ballCenterX = old.midX
         let ballCenterY = old.minY + old.width / 2 // 球心距底边 = 旧球径
@@ -409,11 +409,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let appMenuItem = NSMenuItem()
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "关于 水球", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: "关于 心情球", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "设置…", action: #selector(toggleSettingsPanel), keyEquivalent: ",")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "退出 水球", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "退出 心情球", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appMenuItem.submenu = appMenu
         mainMenu.addItem(appMenuItem)
 
@@ -454,7 +454,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 backing: .buffered,
                 defer: false
             )
-            p.title = "水球设置"
+            p.title = "心情球设置"
             p.isReleasedWhenClosed = false
             p.hidesOnDeactivate = false
             p.contentView = NSHostingView(rootView: SettingsPanelView())

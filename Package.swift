@@ -2,14 +2,14 @@
 import PackageDescription
 
 let package = Package(
-    name: "Waterball",
+    name: "MoodBall",
     platforms: [
         .macOS(.v14)
     ],
     targets: [
         .executableTarget(
-            name: "Waterball",
-            path: "Sources/Waterball"
+            name: "MoodBall",
+            path: "Sources/MoodBall"
         )
     ]
 )

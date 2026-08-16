@@ -4,7 +4,7 @@ import Combine
 
 // MARK: - 接口响应（与 dsh-waterball 插件一致）
 
-struct WaterballStatus: Decodable {
+struct MoodBallStatus: Decodable {
     let ok: Bool
     let mood: String
     let enabled: Bool?
@@ -50,11 +50,11 @@ extension Color {
     }
 }
 
-// MARK: - 全局状态：按设置轮询 /api/waterball/status
+// MARK: - 全局状态：按设置轮询 /api/moodball/status
 
 @MainActor
-final class WaterballModel: ObservableObject {
-    static let shared = WaterballModel()
+final class MoodBallModel: ObservableObject {
+    static let shared = MoodBallModel()
 
     @Published private(set) var connected = false
     @Published private(set) var mood = "idle"
@@ -74,7 +74,7 @@ final class WaterballModel: ObservableObject {
     }
 
     /// 状态气泡文字：空闲/断连/禁用时不显示；其余状态显示中文状态名（思考中/工具调用…）。
-    /// 由 WaterballView 渲染在球脑门上方，AppDelegate 监听 mood 变化同步面板高度。
+    /// 由 MoodBallView 渲染在球脑门上方，AppDelegate 监听 mood 变化同步面板高度。
     var bubbleText: String? {
         switch mood {
         case "idle", "unreachable", "disabled":
@@ -95,7 +95,7 @@ final class WaterballModel: ObservableObject {
         let base = SettingsStore.shared.apiBase
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
-        guard !base.isEmpty, let url = URL(string: base + "/api/waterball/status") else { return nil }
+        guard !base.isEmpty, let url = URL(string: base + "/api/moodball/status") else { return nil }
         return url
     }
 
@@ -156,7 +156,7 @@ final class WaterballModel: ObservableObject {
                 guard http.statusCode == 200 else {
                     throw URLError(.badServerResponse)
                 }
-                let status = try JSONDecoder().decode(WaterballStatus.self, from: data)
+                let status = try JSONDecoder().decode(MoodBallStatus.self, from: data)
                 apply(status)
             } catch {
                 applyUnreachable()
@@ -164,7 +164,7 @@ final class WaterballModel: ObservableObject {
         }
     }
 
-    private func apply(_ status: WaterballStatus) {
+    private func apply(_ status: MoodBallStatus) {
         guard status.ok else {
             applyUnreachable()
             return

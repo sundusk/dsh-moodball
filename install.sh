@@ -1,11 +1,11 @@
 #!/bin/bash
 # =============================================================================
-# waterball-mac 一键安装脚本
+# MoodBall 一键安装脚本
 #
 # 功能：
 #   1. 检查 DeepSeek Harness (dsh) 是否已安装
-#   2. 检查/安装 dsh-waterball 插件（状态接口的生产者）
-#   3. 把桌面呼吸灯 app 复制到 /Applications 并启动
+#   2. 检查/安装 dsh-moodball 插件（状态接口的生产者，纯 host 无网页 UI）
+#   3. 把 MoodBall.app 复制到 ~/Applications 并启动
 #
 # 依赖：
 #   - macOS 14+
@@ -13,17 +13,17 @@
 #   - Node.js + pnpm（安装插件时用到）
 #
 # 用法：
-#   curl -fsSL https://github.com/sundusk/dsh-macDesktop-pet/raw/refs/heads/main/install.sh | bash
+#   curl -fsSL https://github.com/sundusk/dsh-moodball/raw/refs/heads/main/install.sh | bash
 #   或下载后本地执行：./install.sh
 #   注：raw.githubusercontent.com 的 CDN 对最近提交有缓存滞后（可能拿到旧版脚本），
 #       故用 github.com/.../raw/refs/heads/main/... 路径（内部走 API 重定向，更及时）。
 # =============================================================================
 set -euo pipefail
 
-PLUGIN_SPEC="github:sundusk/dsh-waterball-pet"
-STATUS_URL="http://127.0.0.1:3080/api/waterball/status"
-APP_SRC="dist/Waterball.app"
-APP_DEST="/Applications/Waterball.app"
+PLUGIN_SPEC="github:sundusk/dsh-moodball"
+STATUS_URL="http://127.0.0.1:3080/api/moodball/status"
+APP_SRC="dist/MoodBall.app"
+APP_DEST="$HOME/Applications/MoodBall.app"
 
 # 带颜色输出
 info()  { printf "\033[1;34m[info]\033[0m %s\n" "$1"; }
@@ -42,7 +42,7 @@ find_dsh() {
 }
 
 # ---------------------------------------------------------------- 1. 检查插件（接口优先）
-info "检查 dsh-waterball 插件是否已安装……"
+info "检查 MoodBall 状态插件是否已安装……"
 if curl -fsS -m 2 "$STATUS_URL" >/dev/null 2>&1; then
     ok "插件已就绪（$STATUS_URL 可访问）"
     HAS_PLUGIN=1
@@ -67,7 +67,7 @@ else
         err "未检测到 DeepSeek Harness（dsh 命令不存在，且未在常见位置找到）。"
         echo ""
         echo "请先安装并启动 DeepSeek Harness，然后再运行本脚本。"
-        echo "安装方法见：https://github.com/sundusk/dsh-macDesktop-pet#-安装依赖"
+        echo "安装方法见：https://github.com/sundusk/dsh-moodball#-安装依赖"
         echo "（提示：curl|bash 的子 shell 可能读不到你 shell 里配置的 PATH，"
         echo "  如 dsh 可运行，可先 source 你的 shell 配置或改用：bash install.sh）"
         exit 1
@@ -92,8 +92,8 @@ else
 fi
 
 # ---------------------------------------------------------------- 3. 获取 app
-RELEASE_VERSION="v0.2.1"
-RELEASE_URL="https://github.com/sundusk/dsh-macDesktop-pet/releases/download/$RELEASE_VERSION/Waterball.app.zip"
+RELEASE_VERSION="v0.3.0"
+RELEASE_URL="https://github.com/sundusk/dsh-moodball/releases/download/$RELEASE_VERSION/MoodBall.app.zip"
 APP_TMP=""
 
 # 优先用本地构建产物（开发者场景）；否则从 GitHub Release 下载（普通用户场景）
@@ -102,16 +102,16 @@ if [ -d "$APP_SRC" ]; then
 else
     info "未找到本地 ${APP_SRC}，从 GitHub Release 下载……"
     APP_TMP="$(mktemp -d)"
-    if ! curl -fsSL -m 120 -o "$APP_TMP/Waterball.app.zip" "$RELEASE_URL"; then
+    if ! curl -fsSL -m 120 -o "$APP_TMP/MoodBall.app.zip" "$RELEASE_URL"; then
         err "下载 Release 失败：$RELEASE_URL"
         echo "请检查网络，或手动下载：$RELEASE_URL"
         exit 1
     fi
-    if ! unzip -qo "$APP_TMP/Waterball.app.zip" -d "$APP_TMP"; then
+    if ! unzip -qo "$APP_TMP/MoodBall.app.zip" -d "$APP_TMP"; then
         err "解压失败（需要 unzip 命令）。"
         exit 1
     fi
-    APP_SRC="$APP_TMP/Waterball.app"
+    APP_SRC="$APP_TMP/MoodBall.app"
     ok "已下载并解压 Release 版 app"
 fi
 
@@ -119,6 +119,12 @@ fi
 if [ ! -d "$APP_SRC" ]; then
     err "未找到 $APP_SRC —— app 获取失败。"
     exit 1
+fi
+
+# 旧版 Waterball.app（/Applications）兼容提示：P2 再做自动迁移，这里先提醒
+if [ -d "/Applications/Waterball.app" ]; then
+    warn "检测到旧版 Waterball.app（/Applications），建议手动移入废纸篓后继续。"
+    warn "（菜单栏同时保留旧球与新球会造成两个呼吸球并存）"
 fi
 
 if [ -d "$APP_DEST" ]; then
@@ -135,18 +141,19 @@ if [ -n "$APP_TMP" ]; then
     rm -rf "$APP_TMP"
 fi
 
-info "启动桌面呼吸灯……"
+info "启动 MoodBall……"
 open "$APP_DEST"
 ok "启动完成！"
 
 echo ""
 echo "══════════════════════════════════════════════════════════════"
-echo "  ✅ 安装完成！桌面右下角会出现一颗发光呼吸球。"
+echo "  ✅ 安装完成！桌面右下角会出现一颗发光呼吸球（心情球）。"
 echo ""
 echo "  说明："
-echo "  - 插件默认隐藏网页端水球，接口常驻，桌面球可正常变色。"
-echo "  - 想在网页也看到水球：Web UI → 设置 → 插件 → 水球宠物 →"
-echo "    关闭「隐藏网页水球」并保存。"
+echo "  - 状态由 dsh-moodball-status 插件提供（纯 host，无网页水球），"
+echo "    接口常驻 /api/moodball/status，桌面球随 agent 状态变色。"
+echo "  - 想在网页也看到水球？单独安装 dsh-waterball-pet"
+echo "    （Web UI 水球宠物）即可，两者互不影响。"
 echo "  - 菜单栏图标可：显示/隐藏悬浮球、打开设置、退出。"
 echo "  - 设置面板可调大小/颜色/呼吸速度/API 地址等。"
 echo "══════════════════════════════════════════════════════════════"

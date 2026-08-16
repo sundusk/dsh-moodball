@@ -6,7 +6,7 @@ import AppKit
 // mood 颜色会丢失（看起来就是黑点/白点）。改由 AppDelegate 用 AppKit 的
 // NSStatusItem 自绘非模板彩色图标（见 AppDelegate.setupStatusItem）。
 @main
-enum WaterballMain {
+enum MoodBallMain {
     @MainActor
     static func main() {
         let app = NSApplication.shared

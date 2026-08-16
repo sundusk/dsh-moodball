@@ -6,11 +6,11 @@ import SwiftUI
 /// 非空闲状态时，在球脑门上方显示漫画风说话气泡（中文状态提醒），空闲时隐藏。
 /// 布局采用「球体底部锚定」：气泡出现时面板向上增高 bubbleHeight，球心距底边恒为
 /// ballSize，因此球的屏幕位置在气泡显隐切换时保持不变。
-struct WaterballView: View {
-    @ObservedObject var model: WaterballModel
+struct MoodBallView: View {
+    @ObservedObject var model: MoodBallModel
     @ObservedObject private var settings: SettingsStore
 
-    init(model: WaterballModel, settings: SettingsStore) {
+    init(model: MoodBallModel, settings: SettingsStore) {
         self.model = model
         self.settings = settings
     }
@@ -73,7 +73,7 @@ struct WaterballView: View {
                         .frame(width: d * 0.82, height: d * 0.82)
                         .blendMode(.screen)
 
-                    // 眼睛：两个竖椭圆（与网页版水球一致的比例，120 viewBox 下 cx=46/74, rx=6, ry=11）
+                    // 眼睛：两个竖椭圆（与网页版心情球一致的比例，120 viewBox 下 cx=46/74, rx=6, ry=11）
                     // 可在设置面板「外观」里关闭，颜色可切黑白；带眨眼动画（竖向缩放）
                     if settings.showEyes {
                         Ellipse()
@@ -142,7 +142,7 @@ struct WaterballView: View {
     private var dragGesture: some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { _ in
-                guard let panel = WaterballPanel.current else { return }
+                guard let panel = MoodBallPanel.current else { return }
                 panel.isDragging = true
                 let mouse = NSEvent.mouseLocation // 全局坐标（左下原点），与 frame.origin 同坐标系
                 if !hasGrabOffset {
@@ -158,7 +158,7 @@ struct WaterballView: View {
                 ))
             }
             .onEnded { _ in
-                guard let panel = WaterballPanel.current else {
+                guard let panel = MoodBallPanel.current else {
                     hasGrabOffset = false
                     grabOffset = .zero
                     return

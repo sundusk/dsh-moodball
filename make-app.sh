@@ -3,13 +3,13 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-EXEC_NAME="Waterball"
-APP_NAME="Waterball"
-BUNDLE_ID="com.linxin666.waterball-mac"
+EXEC_NAME="MoodBall"
+APP_NAME="MoodBall"
+BUNDLE_ID="com.linxin666.moodball"
 BUILD_DIR=".build/release"
 APP_DIR="dist/${APP_NAME}.app"
-ICON_SOURCE="Resources/water-ball-icon-1024.png"
-ICONSET_DIR=".build/Waterball.iconset"
+ICON_SOURCE="Resources/moodball-icon-1024.png"
+ICONSET_DIR=".build/MoodBall.iconset"
 
 echo "==> swift build -c release --disable-sandbox"
 # --disable-sandbox：项目位于受限工作区（如 DSH 会话目录）时，
@@ -41,7 +41,7 @@ sips -z 512 512 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_256x256@2x.png" >/dev/nu
 sips -z 512 512 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_512x512.png" >/dev/null
 sips -z 1024 1024 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_512x512@2x.png" >/dev/null
 
-iconutil -c icns "$ICONSET_DIR" -o "$APP_DIR/Contents/Resources/Waterball.icns"
+iconutil -c icns "$ICONSET_DIR" -o "$APP_DIR/Contents/Resources/MoodBall.icns"
 
 cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -49,21 +49,21 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>水球</string>
+	<string>心情球</string>
 	<key>CFBundleDisplayName</key>
-	<string>水球</string>
+	<string>心情球</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.linxin666.waterball-mac</string>
+	<string>com.linxin666.moodball</string>
 	<key>CFBundleExecutable</key>
-	<string>Waterball</string>
+	<string>MoodBall</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleIconFile</key>
-	<string>Waterball</string>
+	<string>MoodBall</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.2.1</string>
+	<string>0.3.0</string>
 	<key>CFBundleVersion</key>
-	<string>4</string>
+	<string>5</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>

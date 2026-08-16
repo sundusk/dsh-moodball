@@ -1,4 +1,4 @@
-# dsh-macDesktop-pet — macOS 桌面悬浮呼吸灯
+# MoodBall（心情球）— macOS 桌面悬浮呼吸灯
 
 macOS 原生悬浮呼吸灯：菜单栏常驻 + 一颗置顶的发光小球，颜色随
 「DeepSeek Harness」的 agent 状态变化并呼吸（正在思考中=绿、调工具=紫、做出你的抉择=粉、
@@ -6,18 +6,21 @@ macOS 原生悬浮呼吸灯：菜单栏常驻 + 一颗置顶的发光小球，�
 
 > macOS 14+ · SwiftUI 原生应用 · 需要 DeepSeek Harness（DSH）运行
 >
-> [下载最新 Release](https://github.com/sundusk/dsh-macDesktop-pet/releases/latest) · [查看 v0.2.0](https://github.com/sundusk/dsh-macDesktop-pet/releases/tag/v0.2.0)
+> [下载最新 Release](https://github.com/sundusk/dsh-moodball/releases/latest)
 
 ## 🎈 这是什么？
 
-把网页里的水球带到你的**整个桌面**上。安装后，桌面右下角会出现一颗置顶的发光小球，
+**心情球**把 agent 的状态带到你的**整个桌面**上。安装后，桌面右下角会出现一颗置顶的发光小球，
 颜色随 DeepSeek Harness 的 Agent 运行状态实时呼吸变化——即使不看 Web UI，
 瞄一眼桌面就知道任务进度。非空闲状态时，小球脑门上方还会弹出**漫画风说话气泡**
 （正在思考中/工具调用/做出你的抉择/等待你的授权/搞定啦/出错…），空闲时气泡自动隐藏。
 
-它需要 DeepSeek Harness（`dsh web`）正在运行，并依赖
-[dsh-waterball-pet](https://github.com/sundusk/dsh-waterball-pet) 插件提供状态接口
-（下方一键安装脚本会自动帮你装好插件）。
+### 与网页水球的关系（彻底分开）
+
+- 本仓库提供**桌面版**：`MoodBall.app` + 纯 host 状态插件 `dsh-moodball-status`
+  （无网页 UI，订阅 agent 会话事件并暴露 `GET /api/moodball/status`，桌面球轮询该接口）。
+- 网页版水球是另一个独立产品：[dsh-waterball-pet](https://github.com/sundusk/dsh-waterball-pet)
+  （Web UI 里的漂浮水球）。两者互不依赖、互不影响，可单独或同时安装。
 
 ## 🚀 安装
 
@@ -30,27 +33,27 @@ macOS 原生悬浮呼吸灯：菜单栏常驻 + 一颗置顶的发光小球，�
 ### 方式一：一键安装脚本（推荐）
 
 ```bash
-git clone --depth 1 https://github.com/sundusk/dsh-macDesktop-pet.git
-cd dsh-macDesktop-pet
+git clone --depth 1 https://github.com/sundusk/dsh-moodball.git
+cd dsh-moodball
 bash install.sh
 ```
 
 脚本会自动：
 
-1. 检测状态接口，未装插件则自动执行 `dsh plugin --profile web add github:sundusk/dsh-waterball-pet`
-2. 从 GitHub Release 下载 `Waterball.app`（有本地构建产物时优先用本地）
-3. 把 `Waterball.app` 复制到 `/Applications` 并启动
+1. 检测状态接口 `/api/moodball/status`，未装插件则自动执行 `dsh plugin --profile web add github:sundusk/dsh-moodball`
+2. 从 GitHub Release 下载 `MoodBall.app`（有本地构建产物时优先用本地）
+3. 把 `MoodBall.app` 复制到 `~/Applications` 并启动
 
 > 若脚本提示刚安装了插件，请先重启 `dsh web`（终端 Ctrl+C 后重新运行），
 > 再重新执行一次脚本完成 app 安装。
 
 ### 方式二：下载 Release
 
-从 [最新 Release](https://github.com/sundusk/dsh-macDesktop-pet/releases/latest)
-下载 `Waterball.app.zip`，解压后拖入「应用程序」文件夹，双击「Waterball」启动。
+从 [最新 Release](https://github.com/sundusk/dsh-moodball/releases/latest)
+下载 `MoodBall.app.zip`，解压后放入 `~/Applications`（或「应用程序」），双击「MoodBall」启动。
 
 > 提示：Release 安装不会自动装插件。若尚未安装，请先在终端执行
-> `dsh plugin --profile web add github:sundusk/dsh-waterball-pet`，然后重启 `dsh web`。
+> `dsh plugin --profile web add github:sundusk/dsh-moodball`，然后重启 `dsh web`。
 
 ## ✨ 使用
 
@@ -59,8 +62,8 @@ bash install.sh
 
 ### 以后怎么打开？
 
-- **访达 → 应用程序**：找到「Waterball」，双击
-- **终端**：`open -a Waterball`
+- **访达 → 应用程序（或 ~/Applications）**：找到「MoodBall」，双击
+- **终端**：`open -a MoodBall`
 
 ### 菜单栏图标功能
 
@@ -93,8 +96,21 @@ bash install.sh
 
 ### 常见问题
 
-- **球是灰色的？** 说明 DSH 未运行（显示「DSH 未运行」）或插件被禁用（显示「插件已关闭」）。先确认终端里 `dsh web` 在跑。
-- **想同时看到网页水球？** 插件默认隐藏网页球，Web UI → 设置 → 插件 → 水球宠物 → 关闭「隐藏网页水球」。
+- **球是灰色的？** 说明 DSH 未运行（显示「DSH 未运行」）或状态插件未装（显示「插件已关闭」）。
+  先确认终端里 `dsh web` 在跑，再确认插件已安装并启用。
+- **想同时看到网页水球？** 单独安装 [dsh-waterball-pet](https://github.com/sundusk/dsh-waterball-pet)，
+  桌面球与网页球互不影响。
+
+## 🔧 开发
+
+```bash
+# 插件（dsh-moodball-status，纯 host）：构建到 lib/
+pnpm install
+pnpm build
+
+# app：构建 dist/MoodBall.app 并启动
+bash make-app.sh
+```
 
 ## 📄 License
 
