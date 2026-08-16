@@ -1,12 +1,21 @@
-# MoodBall（心情球）— macOS 桌面悬浮呼吸灯
+<p align="center">
+  <img src="docs/assets/moodball-logo.png" width="140" alt="MoodBall">
+</p>
 
-macOS 原生悬浮呼吸灯：菜单栏常驻 + 一颗置顶的发光小球，颜色随
-「DeepSeek Harness」的 agent 状态变化并呼吸（正在思考中=绿色、调工具=紫色、做出你的抉择=粉色、
-搞定啦=青色、出错了=红色…共 8 种颜色，颜色可在设置面板自定义）。
+<h1 align="center">MoodBall（心情球）</h1>
 
-> macOS 14+ · SwiftUI 原生应用 · 需要 DeepSeek Harness（DSH）运行
->
-> [下载最新 Release](https://github.com/sundusk/dsh-moodball/releases/latest)
+<p align="center">
+  macOS 桌面悬浮呼吸灯 —— 让 Agent 状态可见于整个桌面<br>
+  菜单栏常驻 + 置顶发光小球，随 DeepSeek Harness 的 Agent 状态实时呼吸变色
+</p>
+
+<p align="center">
+  macOS 14+ · SwiftUI 原生应用 · 需要 DeepSeek Harness（DSH）运行
+</p>
+
+<p align="center">
+  <a href="https://github.com/sundusk/dsh-moodball/releases/latest">⬇️ 下载最新 Release</a>
+</p>
 
 ## 🎈 这是什么？
 
