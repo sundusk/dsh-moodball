@@ -20,8 +20,6 @@ macOS 原生悬浮呼吸灯：菜单栏常驻 + 一颗置顶的发光小球，�
 - **MoodBall（心情球）就是这个项目**：`MoodBall.app`（桌面呼吸球）+ 纯 host 状态插件 `dsh-moodball-status`
   （无网页 UI、无设置项，订阅 agent 会话事件并暴露 `GET /api/moodball/status`，
   桌面球轮询该接口）。一切配置都在 app 自己的设置面板里完成。
-- Web UI 里的漂浮水球是**另一个独立的旧项目** [dsh-waterball-pet](https://github.com/sundusk/dsh-waterball-pet)，
-  与本项目无关。
 
 ## 🚀 安装
 
@@ -121,8 +119,6 @@ bash uninstall.sh
 
 - **球是灰色的？** 说明 DSH 未运行（显示「DSH 未运行」）或状态插件未装（显示「插件已关闭」）。
   先确认终端里 `dsh web` 在跑，再确认插件已安装并启用。
-- **想在网页里也放一个漂浮水球？** 那是另一个独立项目 [dsh-waterball-pet](https://github.com/sundusk/dsh-waterball-pet)，
-  与本项目无关，可自行安装。
 
 ## 🔧 开发
 
