@@ -42,12 +42,12 @@ struct MoodBallView: View {
                 let opacity = 0.55 + 0.45 * wave
                 // 眨眼：每 4 秒眨一次，闭眼 0.12s（快）+ 睁眼 0.18s（慢），其余时间全睁
                 let eyeScale = Self.blinkScale(at: t)
-                // 双击兴奋晃动：触发后 1.5s 内左右平移晃动（约 6Hz），幅度线性衰减
+                // 双击兴奋摇动：触发后 1.5s 内绕底部支点左右摇动（钟摆式，约 2.5Hz），幅度线性衰减
                 let wiggleStart = model.wiggleTriggeredAt?.timeIntervalSinceReferenceDate
                 let wiggleTime = wiggleStart.map { t - $0 } ?? 1.5
                 let wiggling = wiggleTime < 1.5
-                let wiggleOffset = wiggling
-                    ? sin(wiggleTime * 2.0 * .pi * 6) * (1.0 - wiggleTime / 1.5) * d * 0.12
+                let wiggleAngle = wiggling
+                    ? sin(wiggleTime * 2.0 * .pi * 2.5) * (1.0 - wiggleTime / 1.5) * 0.28
                     : 0
 
                 ZStack {
@@ -110,7 +110,7 @@ struct MoodBallView: View {
                 }
                 .scaleEffect(scale)
                 .opacity(opacity)
-                .offset(x: wiggleOffset)
+                .rotationEffect(.radians(wiggleAngle), anchor: .bottom)
                 .frame(width: d * 2.0, height: d * 2.0)
             }
             .frame(width: d * 2.0, height: d * 2.0)
