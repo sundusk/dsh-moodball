@@ -18,6 +18,8 @@ struct MoodBallView: View {
     /// 按下时鼠标与窗口原点的偏移（全局坐标），拖拽中保持不变
     @State private var grabOffset: CGSize = .zero
     @State private var hasGrabOffset = false
+    /// 拖拽按下时的鼠标全局坐标（用于区分「单击」与「拖动」）
+    @State private var dragStart: CGPoint?
 
     /// 状态气泡总高度（正文 30 + 尾巴 14），气泡出现时面板额外增高的量。
     /// AppDelegate 同步用它计算面板高度。
@@ -40,16 +42,18 @@ struct MoodBallView: View {
                 let eyeScale = Self.blinkScale(at: t)
 
                 ZStack {
-                    // 外发光
-                    Circle()
-                        .fill(RadialGradient(
-                            colors: [model.color.opacity(0.85), model.color.opacity(0.0)],
-                            center: .center,
-                            startRadius: 0,
-                            endRadius: d * 0.72
-                        ))
-                        .frame(width: d * 1.7, height: d * 1.7)
-                        .blur(radius: 10)
+                    // 外发光（可在快捷控制/设置面板里关闭）
+                    if settings.glowEnabled {
+                        Circle()
+                            .fill(RadialGradient(
+                                colors: [model.color.opacity(0.85), model.color.opacity(0.0)],
+                                center: .center,
+                                startRadius: 0,
+                                endRadius: d * 0.72
+                            ))
+                            .frame(width: d * 1.7, height: d * 1.7)
+                            .blur(radius: 10)
+                    }
 
                     // 球体本体
                     Circle()
@@ -60,7 +64,7 @@ struct MoodBallView: View {
                             endRadius: d
                         ))
                         .frame(width: d, height: d)
-                        .shadow(color: model.color.opacity(0.8), radius: d * 0.16)
+                        .shadow(color: settings.glowEnabled ? model.color.opacity(0.8) : .clear, radius: d * 0.16)
 
                     // 左上高光
                     Circle()
@@ -139,6 +143,7 @@ struct MoodBallView: View {
 
     /// 拖拽：让窗口跟随鼠标的全局位置（抓取点保持在光标下），
     /// 不依赖手势 translation，避免窗口移动后坐标系反馈导致拖拽缩水。
+    /// 单击（几乎无位移）不拖动，而是切换球上快捷控制面板；锁定位置时不可拖拽。
     private var dragGesture: some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { _ in
@@ -150,8 +155,11 @@ struct MoodBallView: View {
                         width: mouse.x - panel.frame.origin.x,
                         height: mouse.y - panel.frame.origin.y
                     )
+                    dragStart = mouse
                     hasGrabOffset = true
                 }
+                // 锁定位置：不移动窗口（仍允许单击弹出快捷控制）
+                if settings.lockPosition { return }
                 panel.setFrameOrigin(NSPoint(
                     x: mouse.x - grabOffset.width,
                     y: mouse.y - grabOffset.height
@@ -159,18 +167,42 @@ struct MoodBallView: View {
             }
             .onEnded { _ in
                 guard let panel = MoodBallPanel.current else {
+                    dragStart = nil
                     hasGrabOffset = false
                     grabOffset = .zero
                     return
                 }
+                let mouse = NSEvent.mouseLocation
+                // 几乎没移动 → 单击：切换球上快捷控制面板
+                let isTap: Bool
+                if let start = dragStart {
+                    isTap = hypot(mouse.x - start.x, mouse.y - start.y) < 4
+                } else {
+                    isTap = false
+                }
+                if isTap {
+                    dragStart = nil
+                    hasGrabOffset = false
+                    grabOffset = .zero
+                    panel.isDragging = false
+                    NotificationCenter.default.post(name: .moodballToggleQuickPanel, object: nil)
+                    return
+                }
+                if settings.lockPosition {
+                    dragStart = nil
+                    hasGrabOffset = false
+                    grabOffset = .zero
+                    panel.isDragging = false
+                    return
+                }
                 // 抬手时把抓取点精确归位到光标下，消除事件延迟造成的残差
                 if hasGrabOffset {
-                    let mouse = NSEvent.mouseLocation
                     panel.setFrameOrigin(NSPoint(
                         x: mouse.x - grabOffset.width,
                         y: mouse.y - grabOffset.height
                     ))
                 }
+                dragStart = nil
                 hasGrabOffset = false
                 grabOffset = .zero
                 panel.isDragging = false

@@ -154,6 +154,14 @@ private struct AppearanceTab: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            Toggle("发光", isOn: Binding(
+                get: { settings.glowEnabled },
+                set: { settings.glowEnabled = $0 }
+            ))
+            Text("关闭后球体不再显示彩色光晕与投影。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
             Button("重置位置到右下角") {
                 NotificationCenter.default.post(name: .waterballResetPosition, object: nil)
             }
@@ -279,6 +287,14 @@ private struct BehaviorTab: View {
                 get: { settings.rememberPosition },
                 set: { settings.rememberPosition = $0 }
             ))
+
+            Toggle("锁定位置", isOn: Binding(
+                get: { settings.lockPosition },
+                set: { settings.lockPosition = $0 }
+            ))
+            Text("开启后不可拖拽移动小球（仍可单击打开快捷控制）。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
             Divider()
             Text("修改 API 地址或轮询间隔会立即生效。")

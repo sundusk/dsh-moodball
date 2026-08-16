@@ -56,8 +56,14 @@ render() {
       <stop offset="0%" stop-color="#ffffff" stop-opacity="0.5"/>
       <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </radialGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#${color}" stop-opacity="0.45"/>
+      <stop offset="55%" stop-color="#${color}" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#${color}" stop-opacity="0"/>
+    </radialGradient>
   </defs>
   <ellipse cx="48" cy="80" rx="26" ry="5" fill="#000000" opacity="0.10"/>
+  <circle cx="48" cy="46" r="40" fill="url(#glow)"/>
   <circle cx="48" cy="46" r="31" fill="url(#ball)"/>
   <circle cx="48" cy="46" r="31" fill="url(#shine)"/>
   <ellipse cx="37" cy="46" rx="4.6" ry="8.4" fill="#ffffff"/>

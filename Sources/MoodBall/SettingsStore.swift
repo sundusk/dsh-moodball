@@ -85,6 +85,8 @@ final class SettingsStore: ObservableObject {
         static let showEyes = "settings.showEyes"
         static let eyeColor = "settings.eyeColor"
         static let showStatusBubble = "settings.showStatusBubble"
+        static let glowEnabled = "settings.glowEnabled"
+        static let lockPosition = "settings.lockPosition"
         static let moodColorPrefix = "settings.moodColor."
     }
 
@@ -113,6 +115,16 @@ final class SettingsStore: ObservableObject {
     /// 状态气泡：非空闲时在球脑门上方显示中文状态提醒，默认开
     @Published var showStatusBubble: Bool {
         didSet { defaults.set(showStatusBubble, forKey: Key.showStatusBubble) }
+    }
+
+    /// 外发光：球体周围的彩色光晕 + 投影，默认开
+    @Published var glowEnabled: Bool {
+        didSet { defaults.set(glowEnabled, forKey: Key.glowEnabled) }
+    }
+
+    /// 锁定位置：开启后不可拖拽（仍可点击打开快捷控制），默认关
+    @Published var lockPosition: Bool {
+        didSet { defaults.set(lockPosition, forKey: Key.lockPosition) }
     }
 
     // MARK: 行为
@@ -169,6 +181,8 @@ final class SettingsStore: ObservableObject {
         showEyes = d.object(forKey: Key.showEyes) == nil ? true : d.bool(forKey: Key.showEyes)
         eyeColor = EyeColor(rawValue: d.string(forKey: Key.eyeColor) ?? "") ?? .white
         showStatusBubble = d.object(forKey: Key.showStatusBubble) == nil ? true : d.bool(forKey: Key.showStatusBubble)
+        glowEnabled = d.object(forKey: Key.glowEnabled) == nil ? true : d.bool(forKey: Key.glowEnabled)
+        lockPosition = d.object(forKey: Key.lockPosition) == nil ? false : d.bool(forKey: Key.lockPosition)
         disconnectedColor = Color(hex: hexFromDefaults(d, key: Key.moodColorPrefix + "disconnected") ?? disconnectedHex)
 
         // 读 7 色（没存过就用契约默认值）
@@ -209,6 +223,8 @@ extension Notification.Name {
     static let waterballResetPosition = Notification.Name("waterballResetPosition")
     /// 菜单栏「设置…」请求（AppDelegate 监听后打开/关闭设置面板）
     static let waterballToggleSettings = Notification.Name("waterballToggleSettings")
+    /// 单击小球 → 打开/关闭快捷控制面板（AppDelegate 监听）
+    static let moodballToggleQuickPanel = Notification.Name("moodballToggleQuickPanel")
 }
 
 // MARK: - hex 工具
