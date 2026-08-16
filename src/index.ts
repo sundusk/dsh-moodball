@@ -1,22 +1,39 @@
 /**
- * dsh-moodball-status host half — a pure host plugin (no browser UI, no
- * settings namespace) that tracks agent activity and serves the current mood
- * over a same-origin JSON route for the MoodBall macOS desktop app. Install
- * via `dsh plugin --profile web add github:sundusk/dsh-moodball`.
+ * dsh-moodball-status host half — tracks agent activity and serves the current
+ * mood over a same-origin JSON route for the MoodBall macOS desktop app. A
+ * pure host plugin (no browser UI); the `moodball` settings namespace backs
+ * the Web settings card (enabled, default true). Install via
+ * `dsh plugin --profile web add github:sundusk/dsh-moodball`.
  * @module @linxin666/dsh-moodball-status
  */
 
 import { Context } from '@deepseek-ai/cordis'
+import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import z from 'schemastery'
 
 /** Stable cordis plugin name (matches cordis.patch.yml insert id). */
 export const name = 'moodball'
 
 /** Services required before the status surface can mount. */
 export const inject = ['webServer']
+
+/** Settings namespace of the moodball capability (the browser card edits it). */
+export const MOODBALL_SETTINGS_NAMESPACE = 'moodball'
+
+/** Settings section schema: one master switch, on by default. */
+export interface MoodballSettingsSection {
+  /** Master switch: off removes the status route (desktop ball shows 插件已关闭). */
+  enabled?: boolean
+}
+
+/** Settings section schema. */
+export const MOODBALL_SETTINGS_SCHEMA = z.object({
+  enabled: z.boolean().default(true),
+})
 
 /** The mood the desktop app renders (same vocabulary as the web water ball). */
 export type MoodballMood =
@@ -38,8 +55,9 @@ function json(res: ServerResponse, status: number, body: unknown): void {
 
 /**
  * Register the MoodBall status surface: fold the agent session stream into a
- * mood and serve it over GET /api/moodball/status. The route is always live
- * while the plugin is loaded — there is no settings namespace to toggle.
+ * mood and serve it over GET /api/moodball/status. The route is live while the
+ * `moodball` settings namespace is enabled; toggling it off removes the route
+ * until re-enabled.
  * @param ctx - host root context.
  */
 export function apply(ctx: Context): void {
@@ -48,6 +66,9 @@ export function apply(ctx: Context): void {
   // ask_user_question 挂起中：选项框弹出期间锁定 questioning，防止
   // activity 追踪器的 tool phase 把它覆盖回 jumping。
   let questionActive = false
+  let current: () => MoodballSettingsSection = () => ({ enabled: true })
+
+  const enabled = (): boolean => current().enabled ?? true
 
   // A transient mood (done / failed / stopped) holds for `ms` before reverting
   // to idle, so the colored reaction is visible instead of being swallowed by
@@ -65,6 +86,7 @@ export function apply(ctx: Context): void {
   // them into a mood. Transient moods (done / failed / stopped) hold briefly
   // so their reaction color is visible before the next idle phase.
   ctx.on('session/event', (_session: Session, event: { type: string; data?: unknown }) => {
+    if (!enabled()) return
     if (event.type === 'turn/start' || event.type === 'step/start' || event.type === 'assistant/chunk') {
       mood = 'waiting'
       holdUntil = 0
@@ -150,11 +172,30 @@ export function apply(ctx: Context): void {
         json(res, 405, { ok: false, error: 'method-not-allowed' })
         return
       }
-      json(res, 200, { ok: true, mood, enabled: true })
+      json(res, 200, { ok: true, mood, enabled: enabled() })
     },
   }
 
-  // Route is always live: unlike the web water ball there is no settings
-  // namespace, so nothing can take it down while the plugin is loaded.
-  ctx.effect(() => ctx.webServer.register(statusRoute), 'moodball: status route')
+  // The route is registered only while the plugin is enabled; toggling the
+  // setting off removes it (the desktop app then shows 插件已关闭).
+  let disposeRoute: (() => void) | undefined
+  const syncRoutes = (): void => {
+    if (disposeRoute === undefined && enabled()) {
+      disposeRoute = ctx.effect(() => ctx.webServer.register(statusRoute), 'moodball: status route')
+    } else if (disposeRoute !== undefined && !enabled()) {
+      disposeRoute()
+      disposeRoute = undefined
+    }
+  }
+
+  installSettingsSection(ctx, settingsNamespace(MOODBALL_SETTINGS_NAMESPACE), MOODBALL_SETTINGS_SCHEMA, {
+    enabled: true,
+  }, {
+    setSource: (source) => { current = source },
+    onChange: () => {
+      if (!enabled()) mood = 'idle'
+      syncRoutes()
+    },
+  })
+  syncRoutes()
 }
