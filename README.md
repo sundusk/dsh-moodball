@@ -108,8 +108,8 @@ bash install.sh
 | 停止 / 中断 | ![停止 / 中断](docs/assets/moodball-stopped.png) | 黑 |
 | 未连接 / 插件未装 | ![未连接](docs/assets/moodball-disconnected.png) | 灰 |
 
-所有颜色都可在设置面板自定义。球图由「状态展示」面板导出（真实渲染，512×512 透明背景，
-仓库内为 400px 版本（气泡文字清晰可读））；`docs/generate-moodball-svgs.sh` 保留作纯球 SVG 后备。
+所有颜色都可在设置面板自定义。球图由「状态展示」面板导出的 **512×512 原图**（真实渲染，正常尺寸显示）；
+`docs/generate-moodball-svgs.sh` 保留作纯球 SVG 后备。
 
 ### 设置面板
 
