@@ -44,6 +44,9 @@ darken() {
 
 render() {
   local name=$1 color=$2 dark=$3
+  # 眼睛默认黑色；stopped 是黑球，黑眼不可见 → 用白眼
+  local eye="#000000"
+  [ "$name" = "stopped" ] && eye="#ffffff"
   cat > "$OUT/moodball-$name.svg" <<SVG
 <svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 96 96" role="img" aria-label="MoodBall $name">
   <defs>
@@ -66,8 +69,8 @@ render() {
   <circle cx="48" cy="46" r="40" fill="url(#glow)"/>
   <circle cx="48" cy="46" r="31" fill="url(#ball)"/>
   <circle cx="48" cy="46" r="31" fill="url(#shine)"/>
-  <ellipse cx="37" cy="46" rx="4.6" ry="8.4" fill="#ffffff"/>
-  <ellipse cx="59" cy="46" rx="4.6" ry="8.4" fill="#ffffff"/>
+  <ellipse cx="37" cy="46" rx="4.6" ry="8.4" fill="${eye}"/>
+  <ellipse cx="59" cy="46" rx="4.6" ry="8.4" fill="${eye}"/>
 </svg>
 SVG
   echo "生成 $OUT/moodball-$name.svg"

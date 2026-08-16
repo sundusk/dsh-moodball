@@ -107,7 +107,7 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(showEyes, forKey: Key.showEyes) }
     }
 
-    /// 眼睛颜色（仅黑白两色），默认白
+    /// 眼睛颜色（仅黑白两色），默认黑
     @Published var eyeColor: EyeColor {
         didSet { defaults.set(eyeColor.rawValue, forKey: Key.eyeColor) }
     }
@@ -179,7 +179,7 @@ final class SettingsStore: ObservableObject {
         clickThroughMode = ClickThroughMode(rawValue: d.string(forKey: Key.clickThrough) ?? "") ?? .hover
         rememberPosition = d.object(forKey: Key.rememberPosition) == nil ? true : d.bool(forKey: Key.rememberPosition)
         showEyes = d.object(forKey: Key.showEyes) == nil ? true : d.bool(forKey: Key.showEyes)
-        eyeColor = EyeColor(rawValue: d.string(forKey: Key.eyeColor) ?? "") ?? .white
+        eyeColor = EyeColor(rawValue: d.string(forKey: Key.eyeColor) ?? "") ?? .black
         showStatusBubble = d.object(forKey: Key.showStatusBubble) == nil ? true : d.bool(forKey: Key.showStatusBubble)
         glowEnabled = d.object(forKey: Key.glowEnabled) == nil ? true : d.bool(forKey: Key.glowEnabled)
         lockPosition = d.object(forKey: Key.lockPosition) == nil ? false : d.bool(forKey: Key.lockPosition)
@@ -223,8 +223,6 @@ extension Notification.Name {
     static let waterballResetPosition = Notification.Name("waterballResetPosition")
     /// 菜单栏「设置…」请求（AppDelegate 监听后打开/关闭设置面板）
     static let waterballToggleSettings = Notification.Name("waterballToggleSettings")
-    /// 单击小球 → 打开/关闭快捷控制面板（AppDelegate 监听）
-    static let moodballToggleQuickPanel = Notification.Name("moodballToggleQuickPanel")
 }
 
 // MARK: - hex 工具

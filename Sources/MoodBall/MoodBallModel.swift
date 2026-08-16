@@ -87,6 +87,14 @@ final class MoodBallModel: ObservableObject {
     /// 悬浮球显隐（菜单栏「显示/隐藏」切换）
     @Published var isBallVisible = true
 
+    /// 双击触发的「兴奋」晃动起点；view 据此计算约 1.5s 的衰减摆动（超时后忽略）
+    @Published private(set) var wiggleTriggeredAt: Date?
+
+    /// 触发一次兴奋晃动（双击小球调用）
+    func triggerWiggle() {
+        wiggleTriggeredAt = Date()
+    }
+
     private var timer: Timer?
     private var settingsCancellable: AnyCancellable?
 

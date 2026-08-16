@@ -53,7 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = MoodBallModel.shared
     private var panel: MoodBallPanel?
     private var settingsPanel: NSPanel?
-    private var quickPanel: NSPanel?
+    private var statePreviewPanel: NSPanel?
     private var hoverTimer: Timer?
     private var visibilitySink: AnyCancellable?
     private var settingsSink: AnyCancellable?
@@ -105,13 +105,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self,
             selector: #selector(toggleSettingsPanelNotification),
             name: .waterballToggleSettings,
-            object: nil
-        )
-        // 单击小球 → 快捷控制面板
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(toggleQuickPanelNotification),
-            name: .moodballToggleQuickPanel,
             object: nil
         )
         appLog.info("didFinishLaunching done")
@@ -333,6 +326,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsItem.target = self
         menu.addItem(settingsItem)
 
+        let previewItem = NSMenuItem(title: "状态展示…", action: #selector(toggleStatePreviewPanel), keyEquivalent: "d")
+        previewItem.target = self
+        menu.addItem(previewItem)
+
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(title: "退出", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -420,6 +417,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(withTitle: "关于 心情球", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "设置…", action: #selector(toggleSettingsPanel), keyEquivalent: ",")
+        appMenu.addItem(withTitle: "状态展示…", action: #selector(toggleStatePreviewPanel), keyEquivalent: "d")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "退出 心情球", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appMenuItem.submenu = appMenu
@@ -447,10 +445,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let settingsPanel, settingsPanel.isVisible {
             settingsPanel.orderOut(nil)
             return
-        }
-        // 打开设置面板时收起快捷面板，避免两个窗口叠加
-        if let quickPanel, quickPanel.isVisible {
-            quickPanel.orderOut(nil)
         }
         openSettingsPanel()
     }
@@ -480,73 +474,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appLog.info("settings panel opened")
     }
 
-    // MARK: - 球上快捷控制面板
+    // MARK: - 状态展示面板（选状态看球，方便截图）
 
-    @objc private func toggleQuickPanelNotification() {
-        toggleQuickPanel()
-    }
-
-    /// 打开/关闭快捷控制面板（单击小球触发）
-    private func toggleQuickPanel() {
-        if let quickPanel, quickPanel.isVisible {
-            quickPanel.orderOut(nil)
+    @objc func toggleStatePreviewPanel() {
+        if let statePreviewPanel, statePreviewPanel.isVisible {
+            statePreviewPanel.orderOut(nil)
             return
         }
-        // 打开快捷面板时收起设置面板，避免叠加
-        if let settingsPanel, settingsPanel.isVisible {
-            settingsPanel.orderOut(nil)
-        }
-        openQuickPanel()
+        // 与其他面板互斥
+        if let settingsPanel, settingsPanel.isVisible { settingsPanel.orderOut(nil) }
+        openStatePreviewPanel()
     }
 
-    private func openQuickPanel() {
+    private func openStatePreviewPanel() {
         let panel: NSPanel
-        if let existing = quickPanel {
+        if let existing = statePreviewPanel {
             panel = existing
         } else {
             let p = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 230, height: 220),
+                contentRect: NSRect(x: 0, y: 0, width: 380, height: 520),
                 styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false
             )
-            p.title = "心情球"
+            p.title = "心情球状态展示"
             p.isReleasedWhenClosed = false
             p.hidesOnDeactivate = false
-            p.contentView = NSHostingView(rootView: QuickControlView())
-            quickPanel = p
+            p.contentView = NSHostingView(rootView: StatePreviewPanelView())
+            p.center()
+            statePreviewPanel = p
             panel = p
         }
-        positionQuickPanel(panel)
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
-        appLog.info("quick panel opened")
-    }
-
-    /// 把快捷面板放到小球右侧；右侧放不下则放左侧，并夹紧在屏幕可视区内。
-    private func positionQuickPanel(_ panel: NSPanel) {
-        guard let ball = self.panel else { return }
-        let gap: CGFloat = 8
-        let ballFrame = ball.frame
-        let panelSize = panel.frame.size
-        let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) })
-            ?? NSScreen.main
-            ?? NSScreen.screens.first
-
-        var origin = NSPoint(
-            x: ballFrame.maxX + gap,
-            y: ballFrame.midY - panelSize.height / 2
-        )
-        if let screen {
-            let vf = screen.visibleFrame
-            if origin.x + panelSize.width > vf.maxX {
-                origin.x = ballFrame.minX - gap - panelSize.width
-            }
-            origin.x = min(max(origin.x, vf.minX), vf.maxX - panelSize.width)
-            origin.y = min(max(origin.y, vf.minY), vf.maxY - panelSize.height)
-        }
-        panel.setFrameOrigin(origin)
-        appLog.info("quick panel position -> \(Int(origin.x)),\(Int(origin.y))")
+        appLog.info("state preview panel opened")
     }
 
     /// 是否已有同 Bundle ID 的其它实例在运行（用于单实例守卫）。

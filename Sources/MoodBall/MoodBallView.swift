@@ -20,6 +20,8 @@ struct MoodBallView: View {
     @State private var hasGrabOffset = false
     /// 拖拽按下时的鼠标全局坐标（用于区分「单击」与「拖动」）
     @State private var dragStart: CGPoint?
+    /// 上次单击时间（用于识别双击 → 兴奋晃动）
+    @State private var lastTapAt: Date?
 
     /// 状态气泡总高度（正文 30 + 尾巴 14），气泡出现时面板额外增高的量。
     /// AppDelegate 同步用它计算面板高度。
@@ -40,6 +42,13 @@ struct MoodBallView: View {
                 let opacity = 0.55 + 0.45 * wave
                 // 眨眼：每 4 秒眨一次，闭眼 0.12s（快）+ 睁眼 0.18s（慢），其余时间全睁
                 let eyeScale = Self.blinkScale(at: t)
+                // 双击兴奋晃动：触发后 1.5s 内左右快速摆动（约 6Hz），幅度线性衰减
+                let wiggleStart = model.wiggleTriggeredAt?.timeIntervalSinceReferenceDate
+                let wiggleTime = wiggleStart.map { t - $0 } ?? 1.5
+                let wiggling = wiggleTime < 1.5
+                let wiggleAngle = wiggling
+                    ? sin(wiggleTime * 2.0 * .pi * 6) * (1.0 - wiggleTime / 1.5) * 0.25
+                    : 0
 
                 ZStack {
                     // 外发光（可在快捷控制/设置面板里关闭）
@@ -101,6 +110,7 @@ struct MoodBallView: View {
                 }
                 .scaleEffect(scale)
                 .opacity(opacity)
+                .rotationEffect(.radians(wiggleAngle))
                 .frame(width: d * 2.0, height: d * 2.0)
             }
             .frame(width: d * 2.0, height: d * 2.0)
@@ -143,7 +153,7 @@ struct MoodBallView: View {
 
     /// 拖拽：让窗口跟随鼠标的全局位置（抓取点保持在光标下），
     /// 不依赖手势 translation，避免窗口移动后坐标系反馈导致拖拽缩水。
-    /// 单击（几乎无位移）不拖动，而是切换球上快捷控制面板；锁定位置时不可拖拽。
+    /// 单击无操作；双击触发兴奋晃动；锁定位置时不可拖拽。
     private var dragGesture: some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { _ in
@@ -181,11 +191,18 @@ struct MoodBallView: View {
                     isTap = false
                 }
                 if isTap {
+                    // 双击（0.35s 内两次单击）→ 兴奋晃动；单击无操作
+                    let now = Date()
+                    if let last = lastTapAt, now.timeIntervalSince(last) < 0.35 {
+                        lastTapAt = nil
+                        model.triggerWiggle()
+                    } else {
+                        lastTapAt = now
+                    }
                     dragStart = nil
                     hasGrabOffset = false
                     grabOffset = .zero
                     panel.isDragging = false
-                    NotificationCenter.default.post(name: .moodballToggleQuickPanel, object: nil)
                     return
                 }
                 if settings.lockPosition {
