@@ -55,15 +55,15 @@ struct StatePreviewPanelView: View {
     }
 
     /// 导出当前状态的小球为固定 512×512 透明背景 PNG（真实渲染，尺寸一致，免截图裁剪）。
+    /// 「显示文字」打开时，气泡会一并导出。
     private func exportPNG() {
         let mood = selectedMood
         let color = selectedColor
-        // 固定画布：球 280px，光晕 1.7×280=476px 完整落在 512 画布内
-        let canvas = ZStack {
-            StateBallPreview(mood: mood, color: color, size: 280)
-        }
-        .frame(width: 512, height: 512)
-        .clipped()
+        let text = previewBubbleText
+        // 固定画布：球 280px，光晕 1.7×280=476px 完整落在 512 画布内；气泡随组合渲染
+        let canvas = BallWithBubble(mood: mood, color: color, size: 280, text: text)
+            .frame(width: 512, height: 512)
+            .clipped()
 
         let renderer = ImageRenderer(content: canvas)
         renderer.scale = 1
@@ -88,16 +88,9 @@ struct StatePreviewPanelView: View {
     var body: some View {
         VStack(spacing: 12) {
             // 小球展示区：浅色底便于截图，球与真实渲染一致；可选气泡文字
-            // 气泡用叠加定位（与真实 app 相同）：尾巴尖端紧贴球顶，间距 = tailGap
             ZStack {
                 Color.black.opacity(0.05)
-                ZStack(alignment: .top) {
-                    StateBallPreview(mood: selectedMood, color: selectedColor, size: 130)
-                    if let text = previewBubbleText {
-                        SpeechBubble(text: text, color: selectedColor)
-                            .offset(y: 130 / 2 - MoodBallView.bubbleHeight - MoodBallView.tailGap)
-                    }
-                }
+                BallWithBubble(mood: selectedMood, color: selectedColor, size: 130, text: previewBubbleText)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 300)
@@ -153,6 +146,25 @@ struct StatePreviewPanelView: View {
         }
         .padding(16)
         .frame(width: 380)
+    }
+}
+
+/// 球 + 可选气泡的组合（与真实 app 布局一致：气泡尾巴尖端贴球顶，间距 = tailGap）。
+/// 预览（130px）与导出 PNG（280px）共用，保证所见即所存。
+private struct BallWithBubble: View {
+    let mood: String
+    let color: Color
+    let size: CGFloat
+    let text: String?
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            StateBallPreview(mood: mood, color: color, size: size)
+            if let text {
+                SpeechBubble(text: text, color: color)
+                    .offset(y: size / 2 - MoodBallView.bubbleHeight - MoodBallView.tailGap)
+            }
+        }
     }
 }
 
