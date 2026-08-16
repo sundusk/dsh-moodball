@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// 状态展示面板：选择一个状态，实时展示对应颜色的小球（真实渲染、静态满状态），
 /// 可切换显示/隐藏气泡文字，方便逐个状态截图用于 README 等文档。
@@ -21,6 +22,8 @@ struct StatePreviewPanelView: View {
     @State private var selectedMood = "idle"
     /// 是否在球上方显示气泡文字（默认关，便于截图纯球）
     @State private var showText = false
+    /// 导出 PNG 的反馈信息
+    @State private var exportMessage: String?
 
     private var selectedColor: Color {
         if selectedMood == "disconnected" {
@@ -51,6 +54,37 @@ struct StatePreviewPanelView: View {
         return settings.moodColors[mood] ?? Color(hex: 0x60a5fa)
     }
 
+    /// 导出当前状态的小球为固定 512×512 透明背景 PNG（真实渲染，尺寸一致，免截图裁剪）。
+    private func exportPNG() {
+        let mood = selectedMood
+        let color = selectedColor
+        // 固定画布：球 280px，光晕 1.7×280=476px 完整落在 512 画布内
+        let canvas = ZStack {
+            StateBallPreview(mood: mood, color: color, size: 280)
+        }
+        .frame(width: 512, height: 512)
+        .clipped()
+
+        let renderer = ImageRenderer(content: canvas)
+        renderer.scale = 1
+        guard let nsImage = renderer.nsImage,
+              let tiff = nsImage.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:]) else {
+            exportMessage = "导出失败"
+            return
+        }
+        let dir = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        let url = dir.appendingPathComponent("moodball-\(mood).png")
+        do {
+            try png.write(to: url)
+            exportMessage = "已保存：桌面/moodball-\(mood).png"
+        } catch {
+            exportMessage = "保存失败：\(error.localizedDescription)"
+        }
+    }
+
     var body: some View {
         VStack(spacing: 12) {
             // 小球展示区：浅色底便于截图，球与真实渲染一致；可选气泡文字
@@ -74,9 +108,17 @@ struct StatePreviewPanelView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 Spacer()
+                Button("保存 PNG") { exportPNG() }
+                    .controlSize(.small)
                 Toggle(showText ? "隐藏文字" : "显示文字", isOn: $showText)
                     .toggleStyle(.switch)
                     .controlSize(.small)
+            }
+
+            if let message = exportMessage {
+                Text(message)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
 
             // 状态选择网格（3 列）
