@@ -116,7 +116,7 @@ bash install.sh
 | 停止 / 中断 | ![停止 / 中断](docs/assets/moodball-stopped.png?v=2) | 黑色 |
 | 未连接 / 插件未装 | ![未连接](docs/assets/moodball-disconnected.png?v=2) | 灰色 |
 
-所有颜色都可在设置面板自定义。
+**所有颜色都可以在设置面板自定义。**
 
 ### 设置面板
 
