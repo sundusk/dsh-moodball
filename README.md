@@ -17,10 +17,9 @@ macOS 原生悬浮呼吸灯：菜单栏常驻 + 一颗置顶的发光小球，�
 
 ### 与网页水球的关系（彻底分开）
 
-- 本仓库提供**桌面版**：`MoodBall.app` + 状态插件 `dsh-moodball-status`
-  （订阅 agent 会话事件并暴露 `GET /api/moodball/status`，桌面球轮询该接口）。
-  插件带一张「心情球」设置卡片（Web UI → 设置 → 插件，默认开启；关闭后状态接口停用，
-  桌面球显示「插件已关闭」）。
+- 本仓库提供**桌面版**：`MoodBall.app` + 纯 host 状态插件 `dsh-moodball-status`
+  （无网页 UI、无设置项，订阅 agent 会话事件并暴露 `GET /api/moodball/status`，
+  桌面球轮询该接口）。一切配置都在 app 自己的设置面板里完成。
 - 网页版水球是另一个独立产品：[dsh-waterball-pet](https://github.com/sundusk/dsh-waterball-pet)
   （Web UI 里的漂浮水球）。两者互不依赖、互不影响，可单独或同时安装。
 

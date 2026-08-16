@@ -1,7 +1,7 @@
 {
   "name": "@linxin666/dsh-moodball-status",
-  "description": "MoodBall desktop status plugin for the dsh web GUI: tracks agent session activity and serves the current mood over GET /api/moodball/status for the MoodBall macOS desktop app, with a settings card (enabled, default on) in the Web UI plugins section.",
-  "version": "0.2.0",
+  "description": "MoodBall desktop status plugin for the dsh web GUI: a pure host plugin (no browser UI, no settings namespace) that tracks agent session activity and serves the current mood over GET /api/moodball/status for the MoodBall macOS desktop app.",
+  "version": "0.3.0",
   "type": "module",
   "repository": {
     "type": "git",
@@ -27,24 +27,11 @@
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
-    "./client": {
-      "types": "./lib/types/client/index.d.ts",
-      "default": "./lib/client.js"
-    },
     "./package.json": "./package.json"
   },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
-    },
-    "client": {
-      "inject": [
-        "@deepseek-ai/dsh-client-runtime",
-        "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-ui-settings",
-        "@deepseek-ai/dsh-client-ui-slots"
-      ],
-      "platform": "web"
     }
   },
   "scripts": {
@@ -52,36 +39,16 @@
     "typecheck": "tsc --noEmit",
     "watch": "tsdown --watch"
   },
-  "dependencies": {
-    "schemastery": "^3.18.0"
-  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-client-locale": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-client-ui-settings": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-client-ui-slots": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-host-webserver": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-session": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-settings": "^0.1.0-rc.6",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "@deepseek-ai/dsh-session": "^0.1.0-rc.6"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-client-locale": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-client-ui-settings": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-client-ui-slots": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-host-webserver": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-session": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-settings": "^0.1.0-rc.6",
     "@types/node": "^22.20.0",
-    "@types/react": "~18.3.31",
-    "@types/react-dom": "~18.3.7",
-    "lightningcss": "^1.32.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
     "tsdown": "^0.22.2",
     "typescript": "~5.7.2"
   },
