@@ -83,18 +83,20 @@ bash install.sh
 
 ### 颜色含义
 
-| 状态 | 颜色 |
-|---|---|
-| 空闲 | 蓝 |
-| 正在思考中 | 绿 |
-| 工具调用 | 紫 |
-| 等待你的授权 | 黄 |
-| 做出你的抉择 | 粉 |
-| 搞定啦 | 青 |
-| 出错 | 红 |
-| 停止 / 中断 | 黑 |
+| 状态 | 心情球 | 颜色 |
+|---|---|---|
+| 空闲 | ![空闲](docs/assets/moodball-idle.svg) | 蓝 |
+| 正在思考中 | ![正在思考中](docs/assets/moodball-waiting.svg) | 绿 |
+| 工具调用 | ![工具调用](docs/assets/moodball-jumping.svg) | 紫 |
+| 等待你的授权 | ![等待你的授权](docs/assets/moodball-authorizing.svg) | 黄 |
+| 做出你的抉择 | ![做出你的抉择](docs/assets/moodball-questioning.svg) | 粉 |
+| 搞定啦 | ![搞定啦](docs/assets/moodball-done.svg) | 青 |
+| 出错 | ![出错](docs/assets/moodball-failed.svg) | 红 |
+| 停止 / 中断 | ![停止 / 中断](docs/assets/moodball-stopped.svg) | 黑 |
+| 未连接 / 插件未装 | ![未连接](docs/assets/moodball-disconnected.svg) | 灰 |
 
-断连时球显示为灰色。所有颜色都可在设置面板自定义。
+所有颜色都可在设置面板自定义。球图由 `docs/generate-moodball-svgs.sh` 生成（SVG，GitHub 原生渲染，
+无需截图）；修改颜色后重跑该脚本即可更新。
 
 ### 设置面板
 
