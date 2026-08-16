@@ -31,12 +31,10 @@ macOS 原生悬浮呼吸灯：菜单栏常驻 + 一颗置顶的发光小球，�
 2. **DeepSeek Harness**：安装方法见 [官方文档](https://github.com/deepseek-ai/deepseek-harness)，装好后终端能运行 `dsh web`
 3. **Node.js + pnpm**（一键安装脚本自动装插件时需要）：https://nodejs.org
 
-### 方式一：一键安装脚本（推荐）
+### 方式一：一键安装（推荐）
 
 ```bash
-git clone --depth 1 https://github.com/sundusk/dsh-moodball.git
-cd dsh-moodball
-bash install.sh
+curl -fsSL https://github.com/sundusk/dsh-moodball/raw/refs/heads/main/install.sh | bash
 ```
 
 脚本会自动：
@@ -48,7 +46,17 @@ bash install.sh
 > 若脚本提示刚安装了插件，请先重启 `dsh web`（终端 Ctrl+C 后重新运行），
 > 再重新执行一次脚本完成 app 安装。
 
-### 方式二：下载 Release
+### 方式二：仓库安装
+
+```bash
+git clone --depth 1 https://github.com/sundusk/dsh-moodball.git
+cd dsh-moodball
+bash install.sh
+```
+
+与方式一完全等价（方式一其实就是直接运行仓库里的 install.sh），适合想顺带查看源码/自行构建的用户。
+
+### 方式三：下载 Release
 
 从 [最新 Release](https://github.com/sundusk/dsh-moodball/releases/latest)
 下载 `MoodBall.app.zip`，解压后放入 `~/Applications`（或「应用程序」），双击「MoodBall」启动。
