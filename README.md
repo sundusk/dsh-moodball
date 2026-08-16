@@ -15,13 +15,13 @@ macOS 原生悬浮呼吸灯：菜单栏常驻 + 一颗置顶的发光小球，�
 瞄一眼桌面就知道任务进度。非空闲状态时，小球脑门上方还会弹出**漫画风说话气泡**
 （正在思考中/工具调用/做出你的抉择/等待你的授权/搞定啦/出错…），空闲时气泡自动隐藏。
 
-### 与网页水球的关系（彻底分开）
+### 关于本项目
 
-- 本仓库提供**桌面版**：`MoodBall.app` + 纯 host 状态插件 `dsh-moodball-status`
+- **MoodBall（心情球）就是这个项目**：`MoodBall.app`（桌面呼吸球）+ 纯 host 状态插件 `dsh-moodball-status`
   （无网页 UI、无设置项，订阅 agent 会话事件并暴露 `GET /api/moodball/status`，
   桌面球轮询该接口）。一切配置都在 app 自己的设置面板里完成。
-- 网页版心情球是另一个独立产品：[dsh-moodball-web](https://github.com/sundusk/dsh-moodball-web)
-  （Web UI 里的漂浮心情球）。两者互不依赖、互不影响，可单独或同时安装。
+- Web UI 里的漂浮水球是**另一个独立的旧项目** [dsh-waterball-pet](https://github.com/sundusk/dsh-waterball-pet)，
+  与本项目无关。
 
 ## 🚀 安装
 
@@ -113,8 +113,8 @@ bash uninstall.sh
 
 - **球是灰色的？** 说明 DSH 未运行（显示「DSH 未运行」）或状态插件未装（显示「插件已关闭」）。
   先确认终端里 `dsh web` 在跑，再确认插件已安装并启用。
-- **想同时看到网页心情球？** 单独安装 [dsh-moodball-web](https://github.com/sundusk/dsh-moodball-web)，
-  桌面球与网页球互不影响。
+- **想在网页里也放一个漂浮水球？** 那是另一个独立项目 [dsh-waterball-pet](https://github.com/sundusk/dsh-waterball-pet)，
+  与本项目无关，可自行安装。
 
 ## 🔧 开发
 
