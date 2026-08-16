@@ -2,7 +2,7 @@
 
 macOS 原生悬浮呼吸灯：菜单栏常驻 + 一颗置顶的发光小球，颜色随
 「DeepSeek Harness」的 agent 状态变化并呼吸（正在思考中=绿、调工具=紫、做出你的抉择=粉、
-搞定啦=青、出错=红…共 8 色，颜色可在设置面板自定义）。
+搞定啦=青、出错了=红…共 8 色，颜色可在设置面板自定义）。
 
 > macOS 14+ · SwiftUI 原生应用 · 需要 DeepSeek Harness（DSH）运行
 >
@@ -13,7 +13,7 @@ macOS 原生悬浮呼吸灯：菜单栏常驻 + 一颗置顶的发光小球，�
 **心情球**把 agent 的状态带到你的**整个桌面**上。安装后，桌面右下角会出现一颗置顶的发光小球，
 颜色随 DeepSeek Harness 的 Agent 运行状态实时呼吸变化——即使不看 Web UI，
 瞄一眼桌面就知道任务进度。非空闲状态时，小球脑门上方还会弹出**漫画风说话气泡**
-（正在思考中/工具调用/做出你的抉择/等待你的授权/搞定啦/出错…），空闲时气泡自动隐藏。
+（正在思考中/工具调用/做出你的抉择/等待你的授权/搞定啦/出错了…），空闲时气泡自动隐藏。
 
 ### 关于本项目
 
@@ -97,7 +97,7 @@ bash install.sh
 | 等待你的授权 | ![等待你的授权](docs/assets/moodball-authorizing.svg) | 黄 |
 | 做出你的抉择 | ![做出你的抉择](docs/assets/moodball-questioning.svg) | 粉 |
 | 搞定啦 | ![搞定啦](docs/assets/moodball-done.svg) | 青 |
-| 出错 | ![出错](docs/assets/moodball-failed.svg) | 红 |
+| 出错了 | ![出错了](docs/assets/moodball-failed.svg) | 红 |
 | 停止 / 中断 | ![停止 / 中断](docs/assets/moodball-stopped.svg) | 黑 |
 | 未连接 / 插件未装 | ![未连接](docs/assets/moodball-disconnected.svg) | 灰 |
 

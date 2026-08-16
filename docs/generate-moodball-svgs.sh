@@ -28,7 +28,7 @@ BALLS=(
   "authorizing:等待你的授权:facc15"
   "questioning:做出你的抉择:ec4899"
   "done:搞定啦:22d3ee"
-  "failed:出错:f87171"
+  "failed:出错了:f87171"
   "stopped:已停止:000000"
   "disconnected:未连接灰:9ca3af"
 )

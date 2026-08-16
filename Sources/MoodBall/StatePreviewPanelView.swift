@@ -13,7 +13,7 @@ struct StatePreviewPanelView: View {
         ("authorizing", "等待你的授权"),
         ("questioning", "做出你的抉择"),
         ("done", "搞定啦"),
-        ("failed", "出错"),
+        ("failed", "出错了"),
         ("stopped", "已停止"),
         ("disconnected", "未连接"),
     ]
