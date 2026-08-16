@@ -1,8 +1,8 @@
 # MoodBall（心情球）— macOS 桌面悬浮呼吸灯
 
 macOS 原生悬浮呼吸灯：菜单栏常驻 + 一颗置顶的发光小球，颜色随
-「DeepSeek Harness」的 agent 状态变化并呼吸（正在思考中=绿、调工具=紫、做出你的抉择=粉、
-搞定啦=青、出错了=红…共 8 色，颜色可在设置面板自定义）。
+「DeepSeek Harness」的 agent 状态变化并呼吸（正在思考中=绿色、调工具=紫色、做出你的抉择=粉色、
+搞定啦=青色、出错了=红色…共 8 种颜色，颜色可在设置面板自定义）。
 
 > macOS 14+ · SwiftUI 原生应用 · 需要 DeepSeek Harness（DSH）运行
 >
@@ -97,15 +97,15 @@ bash install.sh
 
 | 状态 | 心情球 | 颜色 |
 |---|---|---|
-| 空闲 | ![空闲](docs/assets/moodball-idle.png?v=2) | 蓝 |
-| 正在思考中 | ![正在思考中](docs/assets/moodball-waiting.png?v=2) | 绿 |
-| 工具调用 | ![工具调用](docs/assets/moodball-jumping.png?v=2) | 紫 |
-| 等待你的授权 | ![等待你的授权](docs/assets/moodball-authorizing.png?v=2) | 黄 |
-| 做出你的抉择 | ![做出你的抉择](docs/assets/moodball-questioning.png?v=2) | 粉 |
-| 搞定啦 | ![搞定啦](docs/assets/moodball-done.png?v=2) | 青 |
-| 出错了 | ![出错了](docs/assets/moodball-failed.png?v=2) | 红 |
-| 停止 / 中断 | ![停止 / 中断](docs/assets/moodball-stopped.png?v=2) | 黑 |
-| 未连接 / 插件未装 | ![未连接](docs/assets/moodball-disconnected.png?v=2) | 灰 |
+| 空闲 | ![空闲](docs/assets/moodball-idle.png?v=2) | 蓝色 |
+| 正在思考中 | ![正在思考中](docs/assets/moodball-waiting.png?v=2) | 绿色 |
+| 工具调用 | ![工具调用](docs/assets/moodball-jumping.png?v=2) | 紫色 |
+| 等待你的授权 | ![等待你的授权](docs/assets/moodball-authorizing.png?v=2) | 黄色 |
+| 做出你的抉择 | ![做出你的抉择](docs/assets/moodball-questioning.png?v=2) | 粉色 |
+| 搞定啦 | ![搞定啦](docs/assets/moodball-done.png?v=2) | 青色 |
+| 出错了 | ![出错了](docs/assets/moodball-failed.png?v=2) | 红色 |
+| 停止 / 中断 | ![停止 / 中断](docs/assets/moodball-stopped.png?v=2) | 黑色 |
+| 未连接 / 插件未装 | ![未连接](docs/assets/moodball-disconnected.png?v=2) | 灰色 |
 
 所有颜色都可在设置面板自定义。
 
