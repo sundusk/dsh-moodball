@@ -92,7 +92,7 @@ else
 fi
 
 # ---------------------------------------------------------------- 3. 获取 app
-RELEASE_VERSION="v0.3.0"
+RELEASE_VERSION="v0.4.0"
 RELEASE_URL="https://github.com/sundusk/dsh-moodball/releases/download/$RELEASE_VERSION/MoodBall.app.zip"
 APP_TMP=""
 
@@ -121,10 +121,16 @@ if [ ! -d "$APP_SRC" ]; then
     exit 1
 fi
 
-# 旧版 Waterball.app（/Applications）兼容提示：P2 再做自动迁移，这里先提醒
+# 旧版 Waterball.app（/Applications）自动迁移：退出旧球并移除，避免菜单栏双球并存
 if [ -d "/Applications/Waterball.app" ]; then
-    warn "检测到旧版 Waterball.app（/Applications），建议手动移入废纸篓后继续。"
-    warn "（菜单栏同时保留旧球与新球会造成两个呼吸球并存）"
+    info "检测到旧版 Waterball.app（/Applications），正在退出并移除（迁移到 MoodBall）……"
+    osascript -e 'tell application "Waterball" to quit' 2>/dev/null || true
+    sleep 1
+    if pgrep -x Waterball >/dev/null 2>&1; then
+        pkill -x Waterball 2>/dev/null || true
+    fi
+    rm -rf "/Applications/Waterball.app"
+    ok "旧版 Waterball.app 已移除"
 fi
 
 if [ -d "$APP_DEST" ]; then

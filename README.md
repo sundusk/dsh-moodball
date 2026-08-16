@@ -95,6 +95,20 @@ bash install.sh
 菜单栏 →「设置…」可调整：球大小、呼吸速度、8 种状态颜色、眼睛开关与颜色、
 **气泡文字开关**、API 地址、轮询间隔、点击穿透模式等，修改立即生效。
 
+「行为」Tab 底部还有**版本与更新**：显示当前版本，自动/手动检查 GitHub Releases
+是否有新版本，有则给出「前往下载」链接。
+
+### 卸载
+
+```bash
+git clone --depth 1 https://github.com/sundusk/dsh-moodball.git
+cd dsh-moodball
+bash uninstall.sh
+```
+
+脚本会退出并删除 `~/Applications/MoodBall.app`（含 `/Applications` 残留），
+并询问是否同时移除 `dsh-moodball-status` 插件（移除后重启 dsh web 生效）。
+
 ### 常见问题
 
 - **球是灰色的？** 说明 DSH 未运行（显示「DSH 未运行」）或状态插件未装（显示「插件已关闭」）。
@@ -105,7 +119,7 @@ bash install.sh
 ## 🔧 开发
 
 ```bash
-# 插件（dsh-moodball-status）：构建到 lib/（host 半 + client 卡片半）
+# 插件（dsh-moodball-status）：构建到 lib/（纯 host）
 pnpm install
 pnpm build
 

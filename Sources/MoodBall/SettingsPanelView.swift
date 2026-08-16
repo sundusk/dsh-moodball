@@ -284,7 +284,90 @@ private struct BehaviorTab: View {
             Text("修改 API 地址或轮询间隔会立即生效。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            UpdateSection()
         }
         .padding(.vertical, 8)
+    }
+}
+
+// MARK: - 版本与更新
+
+/// 版本信息 + 检查更新（查询 GitHub Releases 最新版，对比本地 CFBundleShortVersionString）。
+private struct UpdateSection: View {
+    private enum UpdateState {
+        case idle
+        case checking
+        case latest
+        case available(UpdateChecker.ReleaseInfo)
+        case failed
+    }
+
+    @State private var state: UpdateState = .idle
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider()
+
+            HStack {
+                Text("当前版本")
+                Spacer()
+                Text(UpdateChecker.currentVersion)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Button("检查更新") {
+                    check()
+                }
+                .disabled(isChecking)
+
+                Spacer()
+
+                switch state {
+                case .idle:
+                    Text("检查 GitHub Releases 是否有新版本")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                case .checking:
+                    Text("检查中…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                case .latest:
+                    Text("已是最新版本")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                case .available(let info):
+                    Link("发现新版本 \(info.latestVersion) → 前往下载", destination: info.releaseURL)
+                        .font(.caption)
+                        .foregroundStyle(.blue)
+                case .failed:
+                    Text("检查失败，请检查网络后重试")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.top, 4)
+        .onAppear {
+            if case .idle = state { check() }
+        }
+    }
+
+    private var isChecking: Bool {
+        if case .checking = state { return true }
+        return false
+    }
+
+    private func check() {
+        state = .checking
+        Task {
+            if let info = await UpdateChecker.checkLatest() {
+                state = info.updateAvailable ? .available(info) : .latest
+            } else {
+                state = .failed
+            }
+        }
     }
 }
