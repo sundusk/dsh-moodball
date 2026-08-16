@@ -98,18 +98,18 @@ bash install.sh
 
 | 状态 | 心情球 | 颜色 |
 |---|---|---|
-| 空闲 | ![空闲](docs/assets/moodball-idle.svg) | 蓝 |
-| 正在思考中 | ![正在思考中](docs/assets/moodball-waiting.svg) | 绿 |
-| 工具调用 | ![工具调用](docs/assets/moodball-jumping.svg) | 紫 |
-| 等待你的授权 | ![等待你的授权](docs/assets/moodball-authorizing.svg) | 黄 |
-| 做出你的抉择 | ![做出你的抉择](docs/assets/moodball-questioning.svg) | 粉 |
-| 搞定啦 | ![搞定啦](docs/assets/moodball-done.svg) | 青 |
-| 出错了 | ![出错了](docs/assets/moodball-failed.svg) | 红 |
-| 停止 / 中断 | ![停止 / 中断](docs/assets/moodball-stopped.svg) | 黑 |
-| 未连接 / 插件未装 | ![未连接](docs/assets/moodball-disconnected.svg) | 灰 |
+| 空闲 | ![空闲](docs/assets/moodball-idle.png) | 蓝 |
+| 正在思考中 | ![正在思考中](docs/assets/moodball-waiting.png) | 绿 |
+| 工具调用 | ![工具调用](docs/assets/moodball-jumping.png) | 紫 |
+| 等待你的授权 | ![等待你的授权](docs/assets/moodball-authorizing.png) | 黄 |
+| 做出你的抉择 | ![做出你的抉择](docs/assets/moodball-questioning.png) | 粉 |
+| 搞定啦 | ![搞定啦](docs/assets/moodball-done.png) | 青 |
+| 出错了 | ![出错了](docs/assets/moodball-failed.png) | 红 |
+| 停止 / 中断 | ![停止 / 中断](docs/assets/moodball-stopped.png) | 黑 |
+| 未连接 / 插件未装 | ![未连接](docs/assets/moodball-disconnected.png) | 灰 |
 
-所有颜色都可在设置面板自定义。球图由 `docs/generate-moodball-svgs.sh` 生成（SVG，GitHub 原生渲染，
-无需截图）；修改颜色后重跑该脚本即可更新。
+所有颜色都可在设置面板自定义。球图由「状态展示」面板导出（真实渲染，512×512 透明背景）；
+`docs/generate-moodball-svgs.sh` 保留作纯球 SVG 后备。
 
 ### 设置面板
 
