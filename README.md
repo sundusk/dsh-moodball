@@ -109,7 +109,7 @@ bash install.sh
 | 未连接 / 插件未装 | ![未连接](docs/assets/moodball-disconnected.png) | 灰 |
 
 所有颜色都可在设置面板自定义。球图由「状态展示」面板导出（真实渲染，512×512 透明背景，
-仓库内压缩为 160px 缩略图）；`docs/generate-moodball-svgs.sh` 保留作纯球 SVG 后备。
+仓库内为 400px 版本（气泡文字清晰可读））；`docs/generate-moodball-svgs.sh` 保留作纯球 SVG 后备。
 
 ### 设置面板
 
