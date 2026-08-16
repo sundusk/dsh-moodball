@@ -96,10 +96,17 @@ bash install.sh
 
 ### 颜色含义
 
-| | 空闲 | 正在思考中 | 工具调用 | 等待你的授权 | 做出你的抉择 | 搞定啦 | 出错了 | 已停止 | 未连接 |
-|---|---|---|---|---|---|---|---|---|---|
-| 心情球 | <img src="docs/assets/moodball-idle.png" width="60" alt="空闲"> | <img src="docs/assets/moodball-waiting.png" width="60" alt="正在思考中"> | <img src="docs/assets/moodball-jumping.png" width="60" alt="工具调用"> | <img src="docs/assets/moodball-authorizing.png" width="60" alt="等待你的授权"> | <img src="docs/assets/moodball-questioning.png" width="60" alt="做出你的抉择"> | <img src="docs/assets/moodball-done.png" width="60" alt="搞定啦"> | <img src="docs/assets/moodball-failed.png" width="60" alt="出错了"> | <img src="docs/assets/moodball-stopped.png" width="60" alt="已停止"> | <img src="docs/assets/moodball-disconnected.png" width="60" alt="未连接"> |
-| 颜色 | 蓝 | 绿 | 紫 | 黄 | 粉 | 青 | 红 | 黑 | 灰 |
+| 状态 | 心情球 | 颜色 |
+|---|---|---|
+| 空闲 | ![空闲](docs/assets/moodball-idle.png) | 蓝 |
+| 正在思考中 | ![正在思考中](docs/assets/moodball-waiting.png) | 绿 |
+| 工具调用 | ![工具调用](docs/assets/moodball-jumping.png) | 紫 |
+| 等待你的授权 | ![等待你的授权](docs/assets/moodball-authorizing.png) | 黄 |
+| 做出你的抉择 | ![做出你的抉择](docs/assets/moodball-questioning.png) | 粉 |
+| 搞定啦 | ![搞定啦](docs/assets/moodball-done.png) | 青 |
+| 出错了 | ![出错了](docs/assets/moodball-failed.png) | 红 |
+| 停止 / 中断 | ![停止 / 中断](docs/assets/moodball-stopped.png) | 黑 |
+| 未连接 / 插件未装 | ![未连接](docs/assets/moodball-disconnected.png) | 灰 |
 
 所有颜色都可在设置面板自定义。球图由「状态展示」面板导出（真实渲染，512×512 透明背景，
 仓库内压缩为 160px 缩略图）；`docs/generate-moodball-svgs.sh` 保留作纯球 SVG 后备。
