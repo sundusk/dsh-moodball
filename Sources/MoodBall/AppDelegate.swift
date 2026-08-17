@@ -54,7 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: MoodBallPanel?
     private var settingsPanel: NSPanel?
     private var statePreviewPanel: NSPanel?
-    private var hoverTimer: Timer?
+    private var hoverMonitors: [Any] = []
     private var visibilitySink: AnyCancellable?
     private var settingsSink: AnyCancellable?
     private var bubbleSink: AnyCancellable?
@@ -112,8 +112,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         model.stop()
-        hoverTimer?.invalidate()
-        hoverTimer = nil
+        for monitor in hoverMonitors {
+            NSEvent.removeMonitor(monitor)
+        }
+        hoverMonitors = []
         bubbleSink?.cancel()
         bubbleSink = nil
         statusSink?.cancel()
@@ -246,11 +248,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - 悬停检测（穿透 ↔ 可拖拽）
 
     private func startHoverMonitor() {
-        hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+        // 事件驱动：鼠标移动/拖拽时才检测，鼠标不动时零唤醒（取代固定频率轮询定时器）。
+        // 本地监视器：本 app 活跃时（拖拽中、设置面板开着）触发；
+        // 全局监视器：其它 app 前台时触发（球默认点击穿透，鼠标事件不派发给本 app，
+        //   只有全局监视器能看到光标移动）。
+        // 全局监视器回调在后台线程，统一跳回主线程再更新。
+        let events: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged]
+        let local = NSEvent.addLocalMonitorForEvents(matching: events) { [weak self] event in
+            Task { @MainActor [weak self] in
+                self?.updateHover()
+            }
+            return event
+        }
+        let global = NSEvent.addGlobalMonitorForEvents(matching: events) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.updateHover()
             }
         }
+        hoverMonitors = [local, global].compactMap { $0 }
     }
 
     private func updateHover() {

@@ -179,16 +179,20 @@ struct StateBallPreview: View {
     var body: some View {
         let d = size
         ZStack {
-            // 外发光
+            // 外发光（与主球一致：多 stop 渐变模拟柔边，不用 blur 滤镜）
             Circle()
                 .fill(RadialGradient(
-                    colors: [color.opacity(0.85), color.opacity(0.0)],
+                    stops: [
+                        .init(color: color.opacity(0.60), location: 0),
+                        .init(color: color.opacity(0.30), location: 0.45),
+                        .init(color: color.opacity(0.08), location: 0.75),
+                        .init(color: color.opacity(0.0), location: 1.0),
+                    ],
                     center: .center,
                     startRadius: 0,
-                    endRadius: d * 0.72
+                    endRadius: d * 0.85
                 ))
                 .frame(width: d * 1.7, height: d * 1.7)
-                .blur(radius: 10)
 
             // 球体本体
             Circle()
