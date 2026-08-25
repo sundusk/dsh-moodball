@@ -92,7 +92,7 @@ else
 fi
 
 # ---------------------------------------------------------------- 3. 获取 app
-RELEASE_VERSION="v0.5.1"
+RELEASE_VERSION="v0.5.2"
 RELEASE_URL="https://github.com/sundusk/dsh-moodball/releases/download/$RELEASE_VERSION/MoodBall.app.zip"
 APP_TMP=""
 

@@ -61,9 +61,9 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 	<key>CFBundleIconFile</key>
 	<string>MoodBall</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.5.1</string>
+	<string>0.5.2</string>
 	<key>CFBundleVersion</key>
-	<string>8</string>
+	<string>9</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
@@ -77,7 +77,9 @@ PLIST
 # 本地 ad-hoc 签名（未签名二进制在 arm64 上也能跑，签名更稳）
 codesign --force --sign - "$APP_DIR" 2>/dev/null || true
 
-echo "==> 打开 $APP_DIR"
-open "$APP_DIR"
+if [ "${MOODBALL_SKIP_OPEN:-0}" != "1" ]; then
+	echo "==> 打开 $APP_DIR"
+	open "$APP_DIR"
+fi
 
 echo "✅ 完成"
