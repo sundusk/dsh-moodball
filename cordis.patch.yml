@@ -9,4 +9,4 @@
 # whitelist support.
 - insert:
     - id: moodball
-      name: '@linxin666/dsh-moodball-status'
+      name: '@sundusk/dsh-moodball-status'

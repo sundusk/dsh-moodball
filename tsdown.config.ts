@@ -7,7 +7,7 @@ import { defineConfig } from 'tsdown'
  * install, so it stays external.
  */
 export default defineConfig({
-  name: '@linxin666/dsh-moodball-status',
+  name: '@sundusk/dsh-moodball-status',
   entry: ['src/index.ts'],
   outDir: 'lib',
   format: ['esm'],

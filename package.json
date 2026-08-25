@@ -1,5 +1,5 @@
 {
-  "name": "@linxin666/dsh-moodball-status",
+  "name": "@sundusk/dsh-moodball-status",
   "description": "MoodBall desktop status plugin for the dsh web GUI: a pure host plugin (no browser UI, no settings namespace) that tracks agent session activity and serves the current mood over GET /api/moodball/status for the MoodBall macOS desktop app.",
   "version": "0.3.0",
   "type": "module",

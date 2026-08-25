@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 
 EXEC_NAME="MoodBall"
 APP_NAME="MoodBall"
-BUNDLE_ID="com.linxin666.moodball"
+BUNDLE_ID="com.sundusk.moodball"
 BUILD_DIR=".build/release"
 APP_DIR="dist/${APP_NAME}.app"
 ICON_SOURCE="Resources/moodball-icon-1024.png"
@@ -53,7 +53,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 	<key>CFBundleDisplayName</key>
 	<string>心情球</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.linxin666.moodball</string>
+	<string>com.sundusk.moodball</string>
 	<key>CFBundleExecutable</key>
 	<string>MoodBall</string>
 	<key>CFBundlePackageType</key>

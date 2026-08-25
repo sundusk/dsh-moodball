@@ -3,7 +3,7 @@ import SwiftUI
 import Combine
 import os
 
-private let appLog = Logger(subsystem: "com.linxin666.waterball-mac", category: "app")
+private let appLog = Logger(subsystem: "com.sundusk.moodball", category: "app")
 
 /// 置顶悬浮窗：透明、无边框、不抢焦点、点击穿透。
 /// 鼠标移入球体范围时恢复响应（可拖拽），移出后再次穿透。

@@ -3,7 +3,7 @@
  * settings namespace) that tracks agent activity and serves the current mood
  * over a same-origin JSON route for the MoodBall macOS desktop app. Install
  * via `dsh plugin --profile web add github:sundusk/dsh-moodball`.
- * @module @linxin666/dsh-moodball-status
+ * @module @sundusk/dsh-moodball-status
  */
 
 import { Context } from '@deepseek-ai/cordis'
