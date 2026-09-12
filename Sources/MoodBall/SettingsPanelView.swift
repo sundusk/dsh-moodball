@@ -52,14 +52,34 @@ private struct PreviewBall: View {
 
     var body: some View {
         let d = settings.ballSize
-        // 预览小球固定为青色 RGB(0,255,255)（不跟随状态色）
+        Group {
+            if settings.skin == .xiaoyu {
+                XiaoyuSpriteView(
+                    mood: "idle",
+                    color: settings.moodColors["idle"] ?? Color(hex: 0x60a5fa),
+                    size: d,
+                    glowEnabled: settings.glowEnabled,
+                    interactionTriggeredAt: nil,
+                    dragDirection: nil
+                )
+            } else {
+                moodBallPreview(diameter: d)
+            }
+        }
+        .scaleEffect(phase ? 1.05 : 0.95)
+        .opacity(phase ? 1.0 : 0.6)
+        .animation(.easeInOut(duration: settings.breathingSpeed).repeatForever(autoreverses: true), value: phase)
+        .onAppear { phase = true }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func moodBallPreview(diameter d: CGFloat) -> some View {
         let color = Color(hex: 0x00FFFF)
-        ZStack {
+        return ZStack {
             Circle()
                 .fill(RadialGradient(colors: [color, color.opacity(0.75)], center: .topLeading, startRadius: 0, endRadius: d))
                 .frame(width: d, height: d)
                 .shadow(color: color.opacity(0.8), radius: d * 0.16)
-            // 眼睛：与主球一致（竖椭圆），跟随「显示眼睛」设置与眼睛颜色；带眨眼动画
             if settings.showEyes {
                 TimelineView(.animation(minimumInterval: 1.0 / 12.0)) { timeline in
                     let eyeScale = MoodBallView.blinkScale(at: timeline.date.timeIntervalSinceReferenceDate)
@@ -77,17 +97,11 @@ private struct PreviewBall: View {
                     }
                 }
             }
-            // 高光
             Circle()
                 .fill(RadialGradient(colors: [Color.white.opacity(0.6), Color.white.opacity(0)], center: UnitPoint(x: 0.35, y: 0.28), startRadius: 0, endRadius: d * 0.6))
                 .frame(width: d * 0.82, height: d * 0.82)
                 .blendMode(.screen)
         }
-        .scaleEffect(phase ? 1.05 : 0.95)
-        .opacity(phase ? 1.0 : 0.6)
-        .animation(.easeInOut(duration: settings.breathingSpeed).repeatForever(autoreverses: true), value: phase)
-        .onAppear { phase = true }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -98,7 +112,25 @@ private struct AppearanceTab: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            LabeledContent("球体大小") {
+            LabeledContent("桌宠") {
+                Picker("桌宠", selection: Binding(
+                    get: { settings.skin },
+                    set: { settings.skin = $0 }
+                )) {
+                    ForEach(FloatingPetSkin.allCases) { skin in
+                        Text(skin.label).tag(skin)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+            }
+
+            Toggle("显示桌宠", isOn: Binding(
+                get: { settings.isBallVisible },
+                set: { settings.isBallVisible = $0 }
+            ))
+
+            LabeledContent("桌宠大小") {
                 HStack {
                     Slider(value: Binding(
                         get: { settings.ballSize },
@@ -111,7 +143,8 @@ private struct AppearanceTab: View {
                 }
             }
 
-            LabeledContent("呼吸速度") {
+            if settings.skin == .moodBall {
+                LabeledContent("呼吸速度") {
                 HStack {
                     Slider(value: Binding(
                         get: { settings.breathingSpeed },
@@ -123,16 +156,16 @@ private struct AppearanceTab: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            Text("周期越短呼吸越快。全局统一速度。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Text("周期越短呼吸越快。仅对心情球生效。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
-            Toggle("显示眼睛", isOn: Binding(
+                Toggle("显示眼睛", isOn: Binding(
                 get: { settings.showEyes },
                 set: { settings.showEyes = $0 }
             ))
 
-            LabeledContent("眼睛颜色") {
+                LabeledContent("眼睛颜色") {
                 Picker("", selection: Binding(
                     get: { settings.eyeColor },
                     set: { settings.eyeColor = $0 }
@@ -144,6 +177,7 @@ private struct AppearanceTab: View {
                 .labelsHidden()
                 .pickerStyle(.segmented)
                 .frame(width: 140)
+                }
             }
 
             Toggle("显示气泡文字", isOn: Binding(

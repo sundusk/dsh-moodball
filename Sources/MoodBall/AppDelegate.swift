@@ -16,8 +16,10 @@ final class MoodBallPanel: NSPanel {
     var isDragging = false
 
     private enum PositionKeys {
-        static let x = "ballPositionX"
-        static let y = "ballPositionY"
+        static let x = "moodball.ballPositionX"
+        static let y = "moodball.ballPositionY"
+        static let legacyX = "ballPositionX"
+        static let legacyY = "ballPositionY"
     }
 
     override var canBecomeKey: Bool { true }
@@ -29,8 +31,11 @@ final class MoodBallPanel: NSPanel {
     func restoreSavedPosition() -> Bool {
         guard SettingsStore.shared.rememberPosition else { return false }
         let defaults = UserDefaults.standard
-        guard let x = defaults.object(forKey: PositionKeys.x) as? CGFloat,
-              let y = defaults.object(forKey: PositionKeys.y) as? CGFloat else { return false }
+        let x = (defaults.object(forKey: PositionKeys.x) as? NSNumber
+            ?? defaults.object(forKey: PositionKeys.legacyX) as? NSNumber)?.doubleValue
+        let y = (defaults.object(forKey: PositionKeys.y) as? NSNumber
+            ?? defaults.object(forKey: PositionKeys.legacyY) as? NSNumber)?.doubleValue
+        guard let x, let y else { return false }
         // 用「窗口中心」判断而非整窗相交：避免显示器变化后只留一截在屏边、球心在屏外
         let center = NSPoint(x: x + self.frame.width / 2, y: y + self.frame.height / 2)
         let visibleFrames = NSScreen.screens.map(\.visibleFrame)
@@ -42,22 +47,34 @@ final class MoodBallPanel: NSPanel {
     /// 拖拽结束时保存当前位置（受「记住位置」设置控制）
     func persistPosition() {
         guard SettingsStore.shared.rememberPosition else { return }
-        UserDefaults.standard.set(frame.origin.x, forKey: PositionKeys.x)
-        UserDefaults.standard.set(frame.origin.y, forKey: PositionKeys.y)
+        UserDefaults.standard.set(Double(frame.origin.x), forKey: PositionKeys.x)
+        UserDefaults.standard.set(Double(frame.origin.y), forKey: PositionKeys.y)
         appLog.info("persistPosition -> \(Int(self.frame.origin.x)),\(Int(self.frame.origin.y))")
     }
+}
+
+/// Separate control surface below the pet. Keeping it in its own panel means
+/// expanding the composer never changes the pet window's drag anchor or size.
+final class MoodBallComposerPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+    override var acceptsFirstResponder: Bool { true }
 }
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = MoodBallModel.shared
     private var panel: MoodBallPanel?
+    private var composerPanel: MoodBallComposerPanel?
     private var settingsPanel: NSPanel?
     private var statePreviewPanel: NSPanel?
     private var hoverMonitors: [Any] = []
     private var visibilitySink: AnyCancellable?
     private var settingsSink: AnyCancellable?
     private var bubbleSink: AnyCancellable?
+    private var composerSink: AnyCancellable?
+    private var commandSink: AnyCancellable?
+    private var resignObserver: NSObjectProtocol?
     private var statusItem: NSStatusItem?
     private var statusSink: AnyCancellable?
     private var statusHeaderItem: NSMenuItem?
@@ -81,11 +98,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupMainMenu()
 
         setupPanel()
+        setupComposerPanel()
         model.start()
         startHoverMonitor()
         observeVisibility()
         observeSettings()
         observeBubble()
+        observeComposer()
         // 显示器增删/分辨率变化时，把球收回可视区（避免被 macOS 甩到屏幕外）
         NotificationCenter.default.addObserver(
             self,
@@ -120,6 +139,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bubbleSink = nil
         statusSink?.cancel()
         statusSink = nil
+        composerSink?.cancel()
+        composerSink = nil
+        commandSink?.cancel()
+        commandSink = nil
+        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
+        resignObserver = nil
     }
 
     // MARK: - 悬浮窗
@@ -153,8 +178,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             positionAtBottomRight(panel)
         }
         MoodBallPanel.current = panel
-        panel.orderFrontRegardless()
+        if SettingsStore.shared.isBallVisible {
+            panel.orderFrontRegardless()
+        }
         self.panel = panel
+    }
+
+    private func setupComposerPanel() {
+        let p = MoodBallComposerPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 72, height: 18),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        p.isOpaque = false
+        p.backgroundColor = .clear
+        p.hasShadow = false
+        p.level = .floating
+        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        p.ignoresMouseEvents = true
+        p.isReleasedWhenClosed = false
+        p.hidesOnDeactivate = false
+        p.animationBehavior = .none
+        p.isExcludedFromWindowsMenu = true
+        p.contentView = NSHostingView(rootView: MoodBallComposerView(model: model, command: model.commandClient))
+        self.composerPanel = p
+        updateComposerPanel()
     }
 
     private func positionAtBottomRight(_ panel: NSPanel) {
@@ -203,6 +252,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self, let panel = self.panel else { return }
                 let showBubble = self.showStatusBubble
                 panel.setFrame(self.panelFrame(ballSize: newSize, showBubble: showBubble), display: true)
+                self.updateComposerPanel()
                 appLog.info("ballSize changed -> \(Int(newSize))")
             }
     }
@@ -270,6 +320,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateHover() {
         guard let panel, panel.isVisible else { return }
+        let mouse = NSEvent.mouseLocation
+        let d = SettingsStore.shared.ballSize
+        let ballCenter = NSPoint(x: panel.frame.midX, y: panel.frame.minY + d)
+        let insideBall = hypot(mouse.x - ballCenter.x, mouse.y - ballCenter.y) <= d
+
+        if SettingsStore.shared.clickThroughMode != .always,
+           model.composerPhase != .expanded {
+            let controlFrame = composerPanel?.frame.insetBy(dx: -14, dy: -18)
+            let bridgeFrame = NSRect(
+                x: min(panel.frame.minX, composerPanel?.frame.minX ?? panel.frame.minX) - 14,
+                y: min(panel.frame.minY, composerPanel?.frame.minY ?? panel.frame.minY) - 18,
+                width: max(panel.frame.maxX, composerPanel?.frame.maxX ?? panel.frame.maxX)
+                    - min(panel.frame.minX, composerPanel?.frame.minX ?? panel.frame.minX) + 28,
+                height: abs(panel.frame.minY - (composerPanel?.frame.maxY ?? panel.frame.minY)) + 36
+            )
+            model.setComposerHovering(insideBall || controlFrame?.contains(mouse) == true || bridgeFrame.contains(mouse))
+        }
+        updateComposerPanel()
+
         switch SettingsStore.shared.clickThroughMode {
         case .always:
             // 永远穿透：常驻忽略鼠标事件（不可拖拽）
@@ -280,11 +349,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .hover:
             // 悬停恢复：鼠标在球体圆形区域（球心距底边 = 球径）内时响应（可拖拽），否则穿透。
             // 面板在气泡出现时会向上增高，因此命中判定收窄到球体圆形，气泡区域保持点击穿透。
-            let mouse = NSEvent.mouseLocation
-            let d = SettingsStore.shared.ballSize
-            let ballCenter = NSPoint(x: panel.frame.midX, y: panel.frame.minY + d)
-            let inside = hypot(mouse.x - ballCenter.x, mouse.y - ballCenter.y) <= d
-            let shouldIgnore = !panel.isDragging && !inside
+            let shouldIgnore = !panel.isDragging && !insideBall
             if panel.ignoresMouseEvents != shouldIgnore {
                 panel.ignoresMouseEvents = shouldIgnore
                 appLog.info("hover -> ignoresMouseEvents=\(shouldIgnore)")
@@ -292,10 +357,84 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - 输入控件面板
+
+    private func observeComposer() {
+        composerSink = model.$composerPhase
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.updateComposerPanel()
+            }
+        commandSink = model.commandClient.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.updateComposerPanel()
+            }
+        resignObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.model.composerPhase == .expanded else { return }
+                self.model.collapseComposer()
+            }
+        }
+    }
+
+    private func updateComposerPanel() {
+        guard let composerPanel else { return }
+        guard SettingsStore.shared.isBallVisible, panel?.isVisible == true else {
+            composerPanel.orderOut(nil)
+            return
+        }
+
+        let size: NSSize
+        switch model.composerPhase {
+        case .resting:
+            size = NSSize(width: 72, height: 18)
+        case .hovering:
+            size = NSSize(width: 48, height: 34)
+        case .expanded:
+            size = NSSize(width: 340, height: 132)
+        }
+        composerPanel.setFrame(composerFrame(size: size), display: true)
+        composerPanel.ignoresMouseEvents = model.composerPhase != .expanded
+            && SettingsStore.shared.clickThroughMode != .never
+            && model.composerPhase != .hovering
+        composerPanel.orderFrontRegardless()
+    }
+
+    private func composerFrame(size: NSSize) -> NSRect {
+        guard let panel else { return NSRect(origin: .zero, size: size) }
+        let centerX = panel.frame.midX
+        let screen = NSScreen.screens.first(where: { $0.visibleFrame.contains(NSPoint(x: centerX, y: panel.frame.midY)) })
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+        let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        // The composer belongs to the pet's bottom edge. Keep only a small
+        // breathing gap so the hover affordance does not look detached.
+        let petControlGap: CGFloat = 4
+        let x = min(max(centerX - size.width / 2, visible.minX + petControlGap), visible.maxX - size.width - petControlGap)
+        let belowY = panel.frame.minY - size.height - petControlGap
+        let y: CGFloat
+        if belowY >= visible.minY + petControlGap {
+            y = belowY
+        } else {
+            // When there is no room below, sit above the visible pet (whose
+            // sprite is bottom-anchored), not above the transparent hit area.
+            y = min(
+                panel.frame.minY + SettingsStore.shared.ballSize + petControlGap,
+                visible.maxY - size.height - petControlGap
+            )
+        }
+        return NSRect(x: x, y: y, width: size.width, height: size.height)
+    }
+
     // MARK: - 菜单栏动作（通过 model.isBallVisible 驱动，避免依赖 NSApp.delegate 类型）
 
     private func observeVisibility() {
-        visibilitySink = model.$isBallVisible
+        visibilitySink = SettingsStore.shared.$isBallVisible
             .receive(on: RunLoop.main)
             .sink { [weak self] visible in
                 guard let self, let panel = self.panel else { return }
@@ -337,6 +476,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toggleMenuItem?.target = self
         menu.addItem(toggleMenuItem!)
 
+        let inputItem = NSMenuItem(title: "输入消息", action: #selector(inputMessageFromMenu), keyEquivalent: "n")
+        inputItem.target = self
+        menu.addItem(inputItem)
+
+        let newSessionItem = NSMenuItem(title: "新建会话", action: #selector(newSessionFromMenu), keyEquivalent: "")
+        newSessionItem.target = self
+        menu.addItem(newSessionItem)
+
+        let workspaceItem = NSMenuItem(title: "选择工作区", action: #selector(selectWorkspaceFromMenu), keyEquivalent: "")
+        workspaceItem.target = self
+        menu.addItem(workspaceItem)
+
+        let openHarnessItem = NSMenuItem(title: "打开 Harness", action: #selector(openHarnessFromMenu), keyEquivalent: "")
+        openHarnessItem.target = self
+        menu.addItem(openHarnessItem)
+
         let settingsItem = NSMenuItem(title: "设置…", action: #selector(toggleSettingsPanel), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
@@ -354,7 +509,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.menu = menu
 
         // mood 颜色 / 球显隐 / 状态文案变化 → 刷新图标与菜单
-        statusSink = model.objectWillChange
+        statusSink = Publishers.Merge(model.objectWillChange, SettingsStore.shared.objectWillChange)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 // objectWillChange 在属性写入前发出，推迟到下一轮再读，保证拿到新值
@@ -431,6 +586,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "关于 心情球", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "输入消息", action: #selector(inputMessageFromMenu), keyEquivalent: "n")
+        appMenu.addItem(withTitle: "新建会话", action: #selector(newSessionFromMenu), keyEquivalent: "")
+        appMenu.addItem(withTitle: "选择工作区", action: #selector(selectWorkspaceFromMenu), keyEquivalent: "")
+        appMenu.addItem(withTitle: "打开 Harness", action: #selector(openHarnessFromMenu), keyEquivalent: "")
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "设置…", action: #selector(toggleSettingsPanel), keyEquivalent: ",")
         appMenu.addItem(withTitle: "状态展示…", action: #selector(toggleStatePreviewPanel), keyEquivalent: "d")
         appMenu.addItem(.separator())
@@ -451,6 +611,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mainMenu.addItem(editMenuItem)
 
         NSApp.mainMenu = mainMenu
+    }
+
+    // MARK: - Harness 输入入口
+
+    @objc private func inputMessageFromMenu() {
+        model.openComposer()
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func newSessionFromMenu() {
+        model.startNewSession()
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func selectWorkspaceFromMenu() {
+        model.openComposer()
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func openHarnessFromMenu() {
+        model.openHarness()
     }
 
     // MARK: - 设置面板

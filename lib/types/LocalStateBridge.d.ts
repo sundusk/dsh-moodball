@@ -1,0 +1,34 @@
+/** The newline-delimited local bridge payload shared with MoodBall.app. */
+export interface MoodBridgePayload {
+    state: string;
+    mood: string;
+    sessionId?: string;
+    workspaceId?: string;
+    taskRunning: boolean;
+    waitingForUser: boolean;
+    failed: boolean;
+    completed: boolean;
+    tool?: string;
+    message?: string;
+    updatedAt: number;
+}
+/**
+ * Small, opt-in local transport for the host plugin.
+ *
+ * The socket is deliberately a server owned by the plugin: MoodBall only
+ * observes it and never starts or stops Harness. Each client receives the
+ * latest snapshot immediately, then one JSON object per line on change.
+ */
+export declare class LocalStateBridge {
+    static defaultPath: string;
+    private readonly socketPath;
+    private readonly readSnapshot;
+    private server;
+    private clients;
+    private ownsSocket;
+    constructor(readSnapshot: () => MoodBridgePayload, socketPath?: string);
+    start(): void;
+    publish(): void;
+    stop(): void;
+    private write;
+}

@@ -21,6 +21,15 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 
 cp "$BUILD_DIR/$EXEC_NAME" "$APP_DIR/Contents/MacOS/$EXEC_NAME"
 
+echo "==> 复制小雨宠物图集"
+for pet_resource in Resources/Pet/Xiaoyu/XiaoyuSprites.png Resources/Pet/Xiaoyu/XiaoyuDragSprites.png; do
+	if [ ! -f "$pet_resource" ]; then
+		echo "未找到宠物资源：$pet_resource" >&2
+		exit 1
+	fi
+	cp "$pet_resource" "$APP_DIR/Contents/Resources/"
+done
+
 if [ ! -f "$ICON_SOURCE" ]; then
 	 echo "未找到应用图标源文件：$ICON_SOURCE" >&2
 	 exit 1
@@ -61,9 +70,9 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 	<key>CFBundleIconFile</key>
 	<string>MoodBall</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.5.2</string>
+	<string>0.6.0</string>
 	<key>CFBundleVersion</key>
-	<string>9</string>
+	<string>10</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>

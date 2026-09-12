@@ -5,8 +5,8 @@
 <h1 align="center">MoodBall（心情球）</h1>
 
 <p align="center">
-  macOS 桌面悬浮呼吸灯 —— 让 Agent 状态飞出 Web UI，悬浮在你桌面的任意位置<br>
-  菜单栏常驻 + 置顶发光小球，随 DeepSeek Harness 的 Agent 状态实时呼吸变色
+  DeepSeek Harness macOS Desktop Pet —— 让 Agent 状态飞出 Web UI，悬浮在你桌面的任意位置<br>
+  菜单栏常驻 + 置顶桌宠，支持心情球与小雨两种皮肤，随 Agent 状态实时变化
 </p>
 
 <p align="center">
@@ -27,8 +27,8 @@
 
 ### 项目组成
 
-- **MoodBall.app**：桌面呼吸球本体
-- **dsh-moodball-status**：状态插件（订阅 agent 会话事件，提供状态接口；无界面、无设置项）
+- **MoodBall.app**：桌面宠物本体（心情球 / 小雨）
+- **dsh-moodball-status**：状态与输入桥接插件（订阅 Agent 会话事件，提供 HTTP/状态 Socket 兼容接口，以及用户级命令 Socket；无 Harness Web UI、无设置项）
 
 一切配置都在 app 的设置面板里完成。
 
@@ -47,8 +47,8 @@
 ### 安装依赖
 
 1. **macOS 14+**
-2. **DeepSeek Harness**：安装方法见 [官方文档](https://github.com/deepseek-ai/deepseek-harness)，装好后终端能运行 `dsh web`
-3. **Node.js + pnpm**（一键安装脚本自动装插件时需要）：https://nodejs.org
+2. **DeepSeek Harness**：支持 NPM/NPX 版和官方源码版，安装方法见 [官方文档](https://github.com/deepseek-ai/deepseek-harness)
+3. **Node.js + pnpm**：NPM/NPX 版需要 Node.js；源码版需要在源码根目录可运行 `pnpm dsh`
 
 ### 方式一：一键安装（推荐）
 
@@ -58,12 +58,29 @@ curl -fsSL https://github.com/sundusk/dsh-moodball/raw/refs/heads/main/install.s
 
 脚本会自动：
 
-1. 检测状态接口 `/api/moodball/status`，未装插件则自动执行 `dsh plugin --profile web add github:sundusk/dsh-moodball`
-2. 从 GitHub Release 下载 `MoodBall.app`（有本地构建产物时优先用本地）
-3. 把 `MoodBall.app` 复制到 `~/Applications` 并启动
+1. 检测当前正在运行的 Harness，并识别 NPM/NPX 或源码版
+2. 源码版在实际源码根目录执行 `pnpm dsh`；NPM/NPX 版执行对应的 `dsh` 或 `npx` CLI
+3. 在目标 Harness 的 `web` profile 中检测/安装状态插件
+4. 从 GitHub latest release 下载 `MoodBall.app`（本地存在 `dist/MoodBall.app` 时优先使用）
+5. 优先安装到 `/Applications`，无权限时自动回退到 `~/Applications` 并启动
 
-> 若脚本提示刚安装了插件，请先重启 `dsh web`（终端 Ctrl+C 后重新运行），
-> 再重新执行一次脚本完成 app 安装。
+脚本只需要执行一次。若插件刚安装而当前 Harness 正在运行，脚本仍会继续安装并启动
+MoodBall.app；请在当前任务完成后重启一次 DeepSeek Harness 让插件加载，**无需再次运行安装脚本**。
+如果 Harness 当前没有运行，MoodBall 会先显示“未连接”，启动 Harness 后自动连接。
+
+安装器不会自动停止或重启正在运行的 Harness，也不会把状态接口暂时不可达直接判断为“插件未安装”。
+如果同时存在多个源码版 Harness 且当前都未运行，会要求选择目标；不会静默把插件装进错误的仓库。
+
+源码版也可以显式指定：
+
+```bash
+DSH_SOURCE_ROOT="$HOME/Projects/deepseek-harness" bash install.sh
+```
+
+安装器会复用当前环境或已识别 Harness 的 `DSH_HOME`，并将最近使用的 Harness 类型、源码路径和 profile
+记录在 `~/Library/Application Support/MoodBall/config.json`，供下一次安装使用。
+
+官方 Desktop 在第一阶段只做检测，不会偷偷把插件安装到 `web` profile；需要等待 Desktop 官方插件安装机制稳定后再支持自动安装。
 
 ### 方式二：仓库安装
 
@@ -81,12 +98,13 @@ bash install.sh
 下载 `MoodBall.app.zip`，解压后放入 `~/Applications`（或「应用程序」），双击「MoodBall」启动。
 
 > 提示：Release 安装不会自动装插件。若尚未安装，请先在终端执行
-> `dsh plugin --profile web add github:sundusk/dsh-moodball`，然后重启 `dsh web`。
+> 对 NPM/NPX 版执行 `dsh plugin --profile web add github:sundusk/dsh-moodball`；
+> 对源码版必须在源码根目录执行 `pnpm dsh plugin --profile web add github:sundusk/dsh-moodball`，然后重启对应 Harness。
 
 ## ✨ 使用
 
 安装并启动后，**桌面上没有任何窗口**——它是个纯菜单栏应用（不占 Dock、不抢焦点）：
-菜单栏右侧出现一个**彩色小水球图标**（圆球 + 两只镂空小圆点眼睛，颜色随状态实时变化），桌面右下角出现发光呼吸球。
+菜单栏右侧出现状态图标，桌面右下角出现当前皮肤的悬浮桌宠。
 
 ### 以后怎么打开？
 
@@ -97,7 +115,7 @@ bash install.sh
 
 | 菜单项 | 功能 |
 |---|---|
-| 状态文字 | 当前连接状态与状态名（如「已连接 · 工具调用」） |
+| 状态文字 | 当前连接状态、状态名与桥接方式（如「已连接 · 工具调用 · 本地桥接」） |
 | 隐藏 / 显示悬浮球 | 开关悬浮球显示 |
 | 设置… | 打开设置面板 |
 | 退出 | 退出 app（不影响 DSH 本体） |
@@ -107,6 +125,25 @@ bash install.sh
 - **拖动**：按住小球任意位置拖动，可把它移到任何地方（位置会记住）
 - **双击**：小球左右摇动约 2 秒，表示兴奋
 - **锁定位置**（设置面板 → 行为）开启后不可拖拽，仍可双击
+
+### 向 Harness 发送消息
+
+宠物下方的短横条会在鼠标靠近时变成笔记按钮。点击后展开原生输入框：
+
+- 首次发送前选择 Harness 已注册的工作区，MoodBall 会记住目标。
+- Enter 发送，Shift+Enter 换行；中文输入法选字时 Enter 只确认候选文字。
+- 第一条消息创建 MoodBall 专用会话，后续消息沿用同一会话；执行中、等待授权或等待回答时暂时不能继续发送。
+- “新建会话”只解除当前绑定，不会删除或停止旧 Harness 任务；“打开 Harness”进入现有 Harness 首页。
+- 命令插件不可用时仍可显示旧版状态，但输入功能会明确禁用；草稿不会被静默丢弃。
+
+### 桌宠皮肤
+
+设置面板 →「外观」→「桌宠」可即时切换：
+
+- **心情球**：保留原有呼吸、眨眼、气泡和状态颜色。
+- **小雨**：使用迁移自 Harness Desktop 的像素图集，支持待机、思考、授权、提问、完成、失败、挥手，以及左右拖拽奔跑。
+
+两种皮肤共用 Agent 状态、显隐、大小、气泡、发光、穿透和位置记忆设置。
 
 ### 状态展示
 
@@ -129,7 +166,10 @@ bash install.sh
 
 **所有颜色都可以在设置面板自定义。**
 
-### 设置面板
+### 状态桥接与设置面板
+
+插件会优先向 `~/Library/Application Support/MoodBall/moodball.sock` 推送换行分隔的状态 JSON；本地桥接不可用时，app 自动回退到设置中的 HTTP 地址 `/api/moodball/status`。
+MoodBall 的状态 Socket 只读；输入功能由独立的用户级命令 Socket 转发到官方 `workspaceRegistry` / `sessionController`。MoodBall 不会启动、停止、升级或修改 Harness，也不模拟 Web UI。
 
 菜单栏 →「设置…」可调整：球大小、呼吸速度、8 种状态颜色、眼睛开关与颜色、
 **气泡文字开关**、**发光开关**、**锁定位置**、API 地址、轮询间隔、点击穿透模式等，修改立即生效。
@@ -163,7 +203,7 @@ bash uninstall.sh
 pnpm install
 pnpm build
 
-# app：构建 dist/MoodBall.app 并启动
+# app：构建 dist/MoodBall.app（含小雨图集）并启动
 bash make-app.sh
 ```
 

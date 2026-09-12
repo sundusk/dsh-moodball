@@ -1,57 +1,39 @@
 import Foundation
+import AppKit
 import SwiftUI
 import Combine
 
-// MARK: - 接口响应（与 dsh-waterball 插件一致）
-
-struct MoodBallStatus: Decodable {
-    let ok: Bool
-    let mood: String
-    let enabled: Bool?
-    let size: Int?
-    let right: Int?
-    let bottom: Int?
-}
-
-// MARK: - 连接状态（区分两种「灰」）
-
 enum ConnectionState {
-    case connected              // 正常拿到 mood
-    case pluginDisabled         // 接口 404：插件 enabled=false（网页球 hidden 不影响桌面球）
-    case unreachable            // 连接失败/非 200：DSH 未运行等
+    case connected
+    case pluginDisabled
+    case unreachable
 }
-
-// MARK: - mood 说明（颜色由 SettingsStore 提供，可在设置面板自定义）
 
 enum MoodColorMap {
     static func label(for mood: String) -> String {
         switch mood {
-        case "idle":     return "空闲"
-        case "waiting":  return "正在思考中"
-        case "jumping":  return "工具调用"
+        case "idle": return "空闲"
+        case "waiting": return "正在思考中"
+        case "jumping": return "工具调用"
         case "authorizing": return "等待你的授权"
         case "questioning": return "做出你的抉择"
-        case "done":     return "搞定啦"
-        case "failed":   return "出错了"
-        case "stopped":  return "已停止"
-        default:         return "未知"
+        case "done": return "搞定啦"
+        case "failed": return "出错了"
+        case "stopped": return "已停止"
+        case "disconnected", "unreachable", "disabled": return "未连接"
+        default: return "未知"
         }
     }
 }
 
-extension Color {
-    /// 0xRRGGBB → Color
-    init(hex: UInt32) {
-        self.init(
-            red: Double((hex >> 16) & 0xFF) / 255.0,
-            green: Double((hex >> 8) & 0xFF) / 255.0,
-            blue: Double(hex & 0xFF) / 255.0
-        )
-    }
+enum MoodBallComposerPhase: Equatable {
+    case resting
+    case hovering
+    case expanded
 }
 
-// MARK: - 全局状态：按设置轮询 /api/moodball/status
-
+/// Presentation model. It only consumes MoodBridgeSnapshot and shared settings;
+/// no view or pet knows about HTTP, Unix sockets, or Harness wire events.
 @MainActor
 final class MoodBallModel: ObservableObject {
     static let shared = MoodBallModel()
@@ -59,136 +41,147 @@ final class MoodBallModel: ObservableObject {
     @Published private(set) var connected = false
     @Published private(set) var mood = "idle"
     @Published private(set) var ballSize: CGFloat = 120
-    @Published private(set) var color: Color = Color(hex: 0x9ca3af)
+    @Published private(set) var color: Color = Color(hex: disconnectedHex)
     @Published private(set) var moodLabel = "未连接"
     @Published private(set) var breathingPeriod: Double = 2.0
     @Published private(set) var connectionState: ConnectionState = .unreachable
+    @Published private(set) var transportKind: TransportKind = .disconnected
+    @Published private(set) var composerPhase: MoodBallComposerPhase = .resting
 
-    /// 菜单栏/状态文案
+    let commandClient = MoodBallCommandClient()
+
+    /// Menu bar status text includes the active transport without exposing its
+    /// implementation to the views.
     var statusText: String {
         switch connectionState {
-        case .connected: return "已连接 · \(moodLabel)"
-        case .pluginDisabled: return "插件已关闭（灰球）"
-        case .unreachable: return "DSH 未运行（灰球）"
+        case .connected:
+            return "已连接 · \(moodLabel) · \(transportKind.rawValue)"
+        case .pluginDisabled:
+            return "插件已关闭（灰球）"
+        case .unreachable:
+            return "Harness 未连接（灰球）"
         }
     }
 
-    /// 状态气泡文字：空闲/断连/禁用时不显示；其余状态显示中文状态名（思考中/工具调用…）。
-    /// 由 MoodBallView 渲染在球脑门上方，AppDelegate 监听 mood 变化同步面板高度。
     var bubbleText: String? {
         switch mood {
-        case "idle", "unreachable", "disabled":
-            return nil
-        default:
-            return moodLabel
+        case "idle", "unreachable", "disabled", "disconnected": return nil
+        default: return moodLabel
         }
     }
 
-    /// 悬浮球显隐（菜单栏「显示/隐藏」切换）
-    @Published var isBallVisible = true
+    var isBallVisible: Bool {
+        get { SettingsStore.shared.isBallVisible }
+        set { SettingsStore.shared.isBallVisible = newValue }
+    }
 
-    /// 双击触发的「兴奋」晃动起点；view 据此计算约 1.5s 的衰减摆动（超时后忽略）
     @Published private(set) var wiggleTriggeredAt: Date?
 
-    /// 触发一次兴奋晃动（双击小球调用）
+    private let bridge: MoodBridge
+    private var bridgeCancellable: AnyCancellable?
+    private var settingsCancellable: AnyCancellable?
+    private var commandSnapshotCancellable: AnyCancellable?
+    private var didStart = false
+
+    init() {
+        bridge = MoodBridge()
+        bridgeCancellable = Publishers.CombineLatest(bridge.$snapshot, bridge.$connection)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] snapshot, connection in
+                self?.transportKind = self?.bridge.transportKind ?? .disconnected
+                self?.apply(snapshot, connection: connection)
+            }
+        commandSnapshotCancellable = commandClient.$sessionSnapshot
+            .receive(on: RunLoop.main)
+            .sink { [weak self] snapshot in
+                guard let self else { return }
+                if let snapshot {
+                    self.apply(snapshot, connection: .connected)
+                } else {
+                    self.apply(self.bridge.snapshot, connection: self.bridge.connection)
+                }
+            }
+        commandClient.onAccepted = { [weak self] in
+            self?.composerPhase = .resting
+        }
+    }
+
+    func start() {
+        guard !didStart else { return }
+        didStart = true
+        let settings = SettingsStore.shared
+        settingsCancellable = Publishers.CombineLatest3(settings.$apiBase, settings.$pollInterval, settings.$requestTimeout)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _, _, _ in
+                guard let self else { return }
+                self.bridge.updateHTTPConfiguration(settings: settings)
+            }
+        bridge.updateHTTPConfiguration(settings: settings)
+        bridge.start()
+        commandClient.start()
+    }
+
+    func stop() {
+        guard didStart else { return }
+        didStart = false
+        settingsCancellable?.cancel()
+        settingsCancellable = nil
+        bridge.stop()
+        commandClient.stop()
+    }
+
     func triggerWiggle() {
         wiggleTriggeredAt = Date()
     }
 
-    private var timer: Timer?
-    private var settingsCancellable: AnyCancellable?
-
-    /// 当前要轮询的完整 URL（跟随设置里的 apiBase）
-    private var statusURL: URL? {
-        let base = SettingsStore.shared.apiBase
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
-        guard !base.isEmpty, let url = URL(string: base + "/api/moodball/status") else { return nil }
-        return url
+    func setComposerHovering(_ hovering: Bool) {
+        guard composerPhase != .expanded else { return }
+        composerPhase = hovering ? .hovering : .resting
     }
 
-    func start() {
-        guard timer == nil else { return }
-        poll() // 立即先拉一次
-        scheduleTimer()
-
-        // apiBase / 轮询间隔变化时，动态重建 Timer 并立即刷新
-        let changes: [AnyPublisher<Void, Never>] = [
-            SettingsStore.shared.$apiBase.map { _ in () as Void }.eraseToAnyPublisher(),
-            SettingsStore.shared.$pollInterval.map { _ in () as Void }.eraseToAnyPublisher(),
-        ]
-        settingsCancellable = Publishers.MergeMany(changes)
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.scheduleTimer()
-                self?.poll()
-            }
+    func openComposer() {
+        composerPhase = .expanded
+        commandClient.refreshWorkspaces()
     }
 
-    func stop() {
-        timer?.invalidate()
-        timer = nil
-        settingsCancellable?.cancel()
-        settingsCancellable = nil
+    func collapseComposer() {
+        composerPhase = .resting
     }
 
-    private func scheduleTimer() {
-        timer?.invalidate()
-        let interval = SettingsStore.shared.pollInterval
-        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.poll()
-            }
-        }
+    func submitDraft() {
+        commandClient.submitDraft()
     }
 
-    private func poll() {
-        guard let url = statusURL else {
-            applyUnreachable()
-            return
-        }
-        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: SettingsStore.shared.requestTimeout)
-        request.httpMethod = "GET"
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        Task {
-            do {
-                let (data, response) = try await URLSession.shared.data(for: request)
-                guard let http = response as? HTTPURLResponse else {
-                    throw URLError(.badServerResponse)
-                }
-                if http.statusCode == 404 {
-                    // 插件被禁用（enabled=false）：路由被移除 → 灰球「插件已关闭」
-                    applyPluginDisabled()
-                    return
-                }
-                guard http.statusCode == 200 else {
-                    throw URLError(.badServerResponse)
-                }
-                let status = try JSONDecoder().decode(MoodBallStatus.self, from: data)
-                apply(status)
-            } catch {
-                applyUnreachable()
-            }
-        }
+    func startNewSession() {
+        commandClient.startNewSession()
+        composerPhase = .expanded
     }
 
-    private func apply(_ status: MoodBallStatus) {
-        guard status.ok else {
-            applyUnreachable()
-            return
-        }
-        // 大小：本地设置优先（球已独立，不再跟随网页）
+    func openHarness() {
+        let raw = SettingsStore.shared.apiBase.trimmingCharacters(in: .whitespacesAndNewlines)
+        let url = URL(string: raw.isEmpty ? "http://127.0.0.1:3080" : raw)
+            ?? URL(string: "http://127.0.0.1:3080")!
+        NSWorkspace.shared.open(url)
+    }
+
+    private func apply(_ snapshot: MoodBridgeSnapshot, connection: TransportConnection) {
         ballSize = SettingsStore.shared.ballSize
-        if status.enabled == false {
+        breathingPeriod = SettingsStore.shared.breathingSpeed
+
+        switch connection {
+        case .connected:
+            connected = true
+            connectionState = .connected
+            mood = snapshot.mood
+            moodLabel = MoodColorMap.label(for: snapshot.mood)
+            color = snapshot.mood == "disconnected"
+                ? SettingsStore.shared.disconnectedColor
+                : SettingsStore.shared.moodColors[snapshot.mood] ?? SettingsStore.shared.disconnectedColor
+        case .pluginDisabled:
             applyPluginDisabled()
-            return
+        case .unavailable:
+            applyUnreachable()
         }
-        connected = true
-        connectionState = .connected
-        mood = status.mood
-        moodLabel = MoodColorMap.label(for: status.mood)
-        color = SettingsStore.shared.moodColors[status.mood] ?? Color(hex: 0x9ca3af)
-        breathingPeriod = SettingsStore.shared.breathingSpeed // 全局统一呼吸速度
     }
 
     private func applyPluginDisabled() {
@@ -197,7 +190,6 @@ final class MoodBallModel: ObservableObject {
         mood = "disabled"
         color = SettingsStore.shared.disconnectedColor
         moodLabel = "插件已关闭"
-        breathingPeriod = SettingsStore.shared.breathingSpeed
     }
 
     private func applyUnreachable() {
@@ -205,7 +197,6 @@ final class MoodBallModel: ObservableObject {
         connectionState = .unreachable
         mood = "unreachable"
         color = SettingsStore.shared.disconnectedColor
-        moodLabel = "DSH 未运行"
-        breathingPeriod = SettingsStore.shared.breathingSpeed
+        moodLabel = "未连接"
     }
 }

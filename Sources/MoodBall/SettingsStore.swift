@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-// MARK: - 可配置的 8 色映射（与 README 契约一致，可被设置面板覆盖）
+// MARK: - 状态颜色契约
 
 struct MoodColorConfig {
     let mood: String
@@ -9,27 +9,39 @@ struct MoodColorConfig {
     let defaultHex: UInt32
 }
 
-/// 8 个 mood 的颜色配置（顺序固定；waving 是网页端交互态，桌面球用不到故不含）
 let moodColorConfigs: [MoodColorConfig] = [
-    MoodColorConfig(mood: "idle",         label: "空闲",   defaultHex: 0x60a5fa), // 蓝
-    MoodColorConfig(mood: "waiting",      label: "正在思考中", defaultHex: 0x34d399), // 绿
-    MoodColorConfig(mood: "jumping",      label: "工具调用", defaultHex: 0xa855f7), // 紫
-    MoodColorConfig(mood: "authorizing",  label: "等待你的授权", defaultHex: 0xfacc15), // 黄
-    MoodColorConfig(mood: "questioning",  label: "做出你的抉择", defaultHex: 0xec4899), // 粉
-    MoodColorConfig(mood: "done",         label: "搞定啦",   defaultHex: 0x22d3ee), // 青
-    MoodColorConfig(mood: "failed",       label: "出错了",   defaultHex: 0xf87171), // 红
-    MoodColorConfig(mood: "stopped",      label: "已停止", defaultHex: 0x000000), // 黑
+    MoodColorConfig(mood: "idle", label: "空闲", defaultHex: 0x60a5fa),
+    MoodColorConfig(mood: "waiting", label: "正在思考中", defaultHex: 0x34d399),
+    MoodColorConfig(mood: "jumping", label: "工具调用", defaultHex: 0xa855f7),
+    MoodColorConfig(mood: "authorizing", label: "等待你的授权", defaultHex: 0xfacc15),
+    MoodColorConfig(mood: "questioning", label: "做出你的抉择", defaultHex: 0xec4899),
+    MoodColorConfig(mood: "done", label: "搞定啦", defaultHex: 0x22d3ee),
+    MoodColorConfig(mood: "failed", label: "出错了", defaultHex: 0xf87171),
+    MoodColorConfig(mood: "stopped", label: "已停止", defaultHex: 0x000000),
 ]
 
-/// 断连/禁用时的灰色
 let disconnectedHex: UInt32 = 0x9ca3af
 
-// MARK: - 穿透模式
+// MARK: - 桌宠类型与通用设置
+
+enum FloatingPetSkin: String, CaseIterable, Identifiable {
+    case moodBall
+    case xiaoyu
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .moodBall: return "心情球"
+        case .xiaoyu: return "小雨"
+        }
+    }
+}
 
 enum ClickThroughMode: String, CaseIterable, Identifiable {
-    case hover     // 悬停时恢复响应（默认）
-    case always    // 永远穿透（不可拖拽）
-    case never     // 永不穿透（常驻响应）
+    case hover
+    case always
+    case never
 
     var id: String { rawValue }
 
@@ -41,8 +53,6 @@ enum ClickThroughMode: String, CaseIterable, Identifiable {
         }
     }
 }
-
-// MARK: - 眼睛颜色（仅黑白两色）
 
 enum EyeColor: String, CaseIterable, Identifiable {
     case white
@@ -65,16 +75,45 @@ enum EyeColor: String, CaseIterable, Identifiable {
     }
 }
 
-// MARK: - 全局设置（UserDefaults 持久化）
+extension Color {
+    init(hex: UInt32) {
+        self.init(
+            red: Double((hex >> 16) & 0xFF) / 255.0,
+            green: Double((hex >> 8) & 0xFF) / 255.0,
+            blue: Double(hex & 0xFF) / 255.0
+        )
+    }
+}
 
+/// Shared pet settings. New values live under `moodball.*`; old `settings.*`
+/// values are read as a compatibility fallback.
 @MainActor
-final class SettingsStore: ObservableObject {
-    static let shared = SettingsStore()
+final class PetSettings: ObservableObject {
+    static let shared = PetSettings()
 
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
 
-    // 键名
     private enum Key {
+        static let skin = "moodball.skin"
+        static let ballSize = "moodball.ballSize"
+        static let breathingSpeed = "moodball.breathingSpeed"
+        static let apiBase = "moodball.apiBase"
+        static let pollInterval = "moodball.pollInterval"
+        static let requestTimeout = "moodball.requestTimeout"
+        static let clickThrough = "moodball.clickThrough"
+        static let rememberPosition = "moodball.rememberPosition"
+        static let showEyes = "moodball.showEyes"
+        static let eyeColor = "moodball.eyeColor"
+        static let showStatusBubble = "moodball.showStatusBubble"
+        static let glowEnabled = "moodball.glowEnabled"
+        static let lockPosition = "moodball.lockPosition"
+        static let isBallVisible = "moodball.isBallVisible"
+        static let positionX = "moodball.ballPositionX"
+        static let positionY = "moodball.ballPositionY"
+        static let moodColorPrefix = "moodball.moodColor."
+    }
+
+    private enum LegacyKey {
         static let ballSize = "settings.ballSize"
         static let breathingSpeed = "settings.breathingSpeed"
         static let apiBase = "settings.apiBase"
@@ -87,145 +126,182 @@ final class SettingsStore: ObservableObject {
         static let showStatusBubble = "settings.showStatusBubble"
         static let glowEnabled = "settings.glowEnabled"
         static let lockPosition = "settings.lockPosition"
+        static let positionX = "ballPositionX"
+        static let positionY = "ballPositionY"
         static let moodColorPrefix = "settings.moodColor."
     }
 
-    // MARK: 外观
+    @Published var skin: FloatingPetSkin {
+        didSet { defaults.set(skin.rawValue, forKey: Key.skin) }
+    }
 
-    /// 球体直径 60–200，默认 120
     @Published var ballSize: CGFloat {
         didSet { defaults.set(Double(ballSize), forKey: Key.ballSize) }
     }
 
-    /// 呼吸周期（秒）0.5–5，默认 2.0（全局统一，简单优先）
     @Published var breathingSpeed: Double {
         didSet { defaults.set(breathingSpeed, forKey: Key.breathingSpeed) }
     }
 
-    /// 是否显示心情球眼睛（白色竖椭圆），默认开
-    @Published var showEyes: Bool {
-        didSet { defaults.set(showEyes, forKey: Key.showEyes) }
-    }
-
-    /// 眼睛颜色（仅黑白两色），默认黑
-    @Published var eyeColor: EyeColor {
-        didSet { defaults.set(eyeColor.rawValue, forKey: Key.eyeColor) }
-    }
-
-    /// 状态气泡：非空闲时在球脑门上方显示中文状态提醒，默认开
     @Published var showStatusBubble: Bool {
         didSet { defaults.set(showStatusBubble, forKey: Key.showStatusBubble) }
     }
 
-    /// 外发光：球体周围的彩色光晕 + 投影，默认开
     @Published var glowEnabled: Bool {
         didSet { defaults.set(glowEnabled, forKey: Key.glowEnabled) }
     }
 
-    /// 锁定位置：开启后不可拖拽（仍可点击打开快捷控制），默认关
+    @Published var isBallVisible: Bool {
+        didSet { defaults.set(isBallVisible, forKey: Key.isBallVisible) }
+    }
+
     @Published var lockPosition: Bool {
         didSet { defaults.set(lockPosition, forKey: Key.lockPosition) }
     }
 
-    // MARK: 行为
+    @Published var showEyes: Bool {
+        didSet { defaults.set(showEyes, forKey: Key.showEyes) }
+    }
 
-    /// API 基地址，默认 http://127.0.0.1:3080
+    @Published var eyeColor: EyeColor {
+        didSet { defaults.set(eyeColor.rawValue, forKey: Key.eyeColor) }
+    }
+
     @Published var apiBase: String {
         didSet { defaults.set(apiBase, forKey: Key.apiBase) }
     }
 
-    /// 轮询间隔（秒）0.3–5，默认 0.7
     @Published var pollInterval: Double {
         didSet { defaults.set(pollInterval, forKey: Key.pollInterval) }
     }
 
-    /// 请求超时（秒）0.5–5，默认 2
     @Published var requestTimeout: Double {
         didSet { defaults.set(requestTimeout, forKey: Key.requestTimeout) }
     }
 
-    /// 点击穿透模式
     @Published var clickThroughMode: ClickThroughMode {
         didSet { defaults.set(clickThroughMode.rawValue, forKey: Key.clickThrough) }
     }
 
-    /// 记住拖拽位置（重启恢复）
     @Published var rememberPosition: Bool {
         didSet { defaults.set(rememberPosition, forKey: Key.rememberPosition) }
     }
 
-    // MARK: 颜色
-
-    /// 当前 mood → 颜色（跟随 mood 永远生效；颜色可自定义）
     @Published private(set) var moodColors: [String: Color] = [:]
 
-    /// 断连/禁用灰
     @Published var disconnectedColor: Color {
-        didSet {
-            // 存 hex
-            defaults.set(colorToHex(disconnectedColor), forKey: Key.moodColorPrefix + "disconnected")
+        didSet { writeColor(disconnectedColor, key: Key.moodColorPrefix + "disconnected") }
+    }
+
+    var savedBallPosition: CGPoint? {
+        get {
+            guard let x = Self.number(defaults, for: Key.positionX, legacy: LegacyKey.positionX),
+                  let y = Self.number(defaults, for: Key.positionY, legacy: LegacyKey.positionY) else { return nil }
+            return CGPoint(x: x, y: y)
+        }
+        set {
+            if let newValue {
+                defaults.set(Double(newValue.x), forKey: Key.positionX)
+                defaults.set(Double(newValue.y), forKey: Key.positionY)
+            } else {
+                defaults.removeObject(forKey: Key.positionX)
+                defaults.removeObject(forKey: Key.positionY)
+            }
         }
     }
 
-    init() {
-        let d = UserDefaults.standard
-        let clamp = { (v: Double, lo: Double, hi: Double) in min(max(v, lo), hi) }
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        let clamp = { (value: Double, lower: Double, upper: Double) in min(max(value, lower), upper) }
 
-        ballSize = CGFloat(clamp(d.double(forKey: Key.ballSize) == 0 ? 120 : d.double(forKey: Key.ballSize), 60, 200))
-        breathingSpeed = clamp(d.double(forKey: Key.breathingSpeed) == 0 ? 2.0 : d.double(forKey: Key.breathingSpeed), 0.5, 5)
-        apiBase = d.string(forKey: Key.apiBase) ?? "http://127.0.0.1:3080"
-        pollInterval = clamp(d.double(forKey: Key.pollInterval) == 0 ? 0.7 : d.double(forKey: Key.pollInterval), 0.3, 5)
-        requestTimeout = clamp(d.double(forKey: Key.requestTimeout) == 0 ? 2.0 : d.double(forKey: Key.requestTimeout), 0.5, 5)
-        clickThroughMode = ClickThroughMode(rawValue: d.string(forKey: Key.clickThrough) ?? "") ?? .hover
-        rememberPosition = d.object(forKey: Key.rememberPosition) == nil ? true : d.bool(forKey: Key.rememberPosition)
-        showEyes = d.object(forKey: Key.showEyes) == nil ? true : d.bool(forKey: Key.showEyes)
-        eyeColor = EyeColor(rawValue: d.string(forKey: Key.eyeColor) ?? "") ?? .black
-        showStatusBubble = d.object(forKey: Key.showStatusBubble) == nil ? true : d.bool(forKey: Key.showStatusBubble)
-        glowEnabled = d.object(forKey: Key.glowEnabled) == nil ? true : d.bool(forKey: Key.glowEnabled)
-        lockPosition = d.object(forKey: Key.lockPosition) == nil ? false : d.bool(forKey: Key.lockPosition)
-        disconnectedColor = Color(hex: hexFromDefaults(d, key: Key.moodColorPrefix + "disconnected") ?? disconnectedHex)
+        skin = FloatingPetSkin(rawValue: defaults.string(forKey: Key.skin) ?? "") ?? .xiaoyu
+        ballSize = CGFloat(clamp(Self.number(defaults, for: Key.ballSize, legacy: LegacyKey.ballSize) ?? 120, 60, 200))
+        breathingSpeed = clamp(Self.number(defaults, for: Key.breathingSpeed, legacy: LegacyKey.breathingSpeed) ?? 2, 0.5, 5)
+        apiBase = Self.string(defaults, for: Key.apiBase, legacy: LegacyKey.apiBase) ?? "http://127.0.0.1:3080"
+        pollInterval = clamp(Self.number(defaults, for: Key.pollInterval, legacy: LegacyKey.pollInterval) ?? 0.7, 0.3, 5)
+        requestTimeout = clamp(Self.number(defaults, for: Key.requestTimeout, legacy: LegacyKey.requestTimeout) ?? 2, 0.5, 5)
+        clickThroughMode = ClickThroughMode(rawValue: Self.string(defaults, for: Key.clickThrough, legacy: LegacyKey.clickThrough) ?? "") ?? .hover
+        rememberPosition = Self.bool(defaults, for: Key.rememberPosition, legacy: LegacyKey.rememberPosition) ?? true
+        showEyes = Self.bool(defaults, for: Key.showEyes, legacy: LegacyKey.showEyes) ?? true
+        eyeColor = EyeColor(rawValue: Self.string(defaults, for: Key.eyeColor, legacy: LegacyKey.eyeColor) ?? "") ?? .black
+        showStatusBubble = Self.bool(defaults, for: Key.showStatusBubble, legacy: LegacyKey.showStatusBubble) ?? true
+        glowEnabled = Self.bool(defaults, for: Key.glowEnabled, legacy: LegacyKey.glowEnabled) ?? true
+        lockPosition = Self.bool(defaults, for: Key.lockPosition, legacy: LegacyKey.lockPosition) ?? false
+        isBallVisible = defaults.object(forKey: Key.isBallVisible) == nil ? true : defaults.bool(forKey: Key.isBallVisible)
+        disconnectedColor = Color(hex: Self.hex(defaults, for: Key.moodColorPrefix + "disconnected", legacy: LegacyKey.moodColorPrefix + "disconnected") ?? disconnectedHex)
 
-        // 读 7 色（没存过就用契约默认值）
         var colors: [String: Color] = [:]
-        for cfg in moodColorConfigs {
-            let hex = hexFromDefaults(d, key: Key.moodColorPrefix + cfg.mood) ?? cfg.defaultHex
-            colors[cfg.mood] = Color(hex: hex)
+        for config in moodColorConfigs {
+            let key = Key.moodColorPrefix + config.mood
+            let legacy = LegacyKey.moodColorPrefix + config.mood
+            colors[config.mood] = Color(hex: Self.hex(defaults, for: key, legacy: legacy) ?? config.defaultHex)
         }
         moodColors = colors
     }
 
-    /// 设置某个 mood 的颜色
     func setMoodColor(_ mood: String, _ color: Color) {
         moodColors[mood] = color
-        defaults.set(colorToHex(color), forKey: Key.moodColorPrefix + mood)
+        writeColor(color, key: Key.moodColorPrefix + mood)
     }
 
-    /// 全部恢复契约默认色
     func resetMoodColors() {
         var colors: [String: Color] = [:]
-        for cfg in moodColorConfigs {
-            colors[cfg.mood] = Color(hex: cfg.defaultHex)
-            defaults.removeObject(forKey: Key.moodColorPrefix + cfg.mood)
+        for config in moodColorConfigs {
+            colors[config.mood] = Color(hex: config.defaultHex)
+            defaults.removeObject(forKey: Key.moodColorPrefix + config.mood)
         }
         moodColors = colors
         disconnectedColor = Color(hex: disconnectedHex)
         defaults.removeObject(forKey: Key.moodColorPrefix + "disconnected")
     }
 
-    /// 位置重置（交给 AppDelegate 执行实际定位）
     func resetPositionRequested() {
         NotificationCenter.default.post(name: .waterballResetPosition, object: nil)
     }
+
+    private static func storedValue(_ defaults: UserDefaults, for key: String, legacy: String) -> Any? {
+        defaults.object(forKey: key) ?? defaults.object(forKey: legacy)
+    }
+
+    private static func number(_ defaults: UserDefaults, for key: String, legacy: String) -> Double? {
+        if let number = storedValue(defaults, for: key, legacy: legacy) as? NSNumber { return number.doubleValue }
+        if let string = storedValue(defaults, for: key, legacy: legacy) as? String { return Double(string) }
+        return nil
+    }
+
+    private static func string(_ defaults: UserDefaults, for key: String, legacy: String) -> String? {
+        if let string = storedValue(defaults, for: key, legacy: legacy) as? String { return string }
+        if let number = storedValue(defaults, for: key, legacy: legacy) as? NSNumber { return number.stringValue }
+        return nil
+    }
+
+    private static func bool(_ defaults: UserDefaults, for key: String, legacy: String) -> Bool? {
+        guard storedValue(defaults, for: key, legacy: legacy) != nil else { return nil }
+        return defaults.bool(forKey: defaults.object(forKey: key) != nil ? key : legacy)
+    }
+
+    private static func hex(_ defaults: UserDefaults, for key: String, legacy: String) -> UInt32? {
+        if let string = defaults.object(forKey: key) as? String ?? defaults.object(forKey: legacy) as? String {
+            return UInt32(string, radix: 16)
+        }
+        if let number = defaults.object(forKey: key) as? NSNumber ?? defaults.object(forKey: legacy) as? NSNumber {
+            return number.uint32Value
+        }
+        return nil
+    }
+
+    private func writeColor(_ color: Color, key: String) {
+        defaults.set(String(format: "%06X", colorToHex(color)), forKey: key)
+    }
 }
+
+/// Compatibility name retained while downstream source adopts `PetSettings`.
+typealias SettingsStore = PetSettings
 
 extension Notification.Name {
-    /// 设置面板「位置重置」请求
     static let waterballResetPosition = Notification.Name("waterballResetPosition")
-    /// 菜单栏「设置…」请求（AppDelegate 监听后打开/关闭设置面板）
     static let waterballToggleSettings = Notification.Name("waterballToggleSettings")
 }
-
-// MARK: - hex 工具
 
 func colorToHex(_ color: Color) -> UInt32 {
     let resolved = NSColor(color).usingColorSpace(.sRGB) ?? NSColor(color)
@@ -233,10 +309,4 @@ func colorToHex(_ color: Color) -> UInt32 {
     let g = Int((resolved.greenComponent * 255).rounded())
     let b = Int((resolved.blueComponent * 255).rounded())
     return UInt32(r << 16 | g << 8 | b)
-}
-
-func hexFromDefaults(_ d: UserDefaults, key: String) -> UInt32? {
-    let raw = d.string(forKey: key)
-    guard let raw, let value = UInt32(raw, radix: 16) else { return nil }
-    return value
 }

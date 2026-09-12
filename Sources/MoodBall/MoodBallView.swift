@@ -1,33 +1,36 @@
 import SwiftUI
 
-/// 发光小球：radialGradient 本体 + blur 外发光 + 高光，
+/// 发光心情球：radialGradient 本体 + blur 外发光 + 高光，
 /// 用 TimelineView 按 mood 周期做正弦呼吸（透明度 + 缩放，ease-in-out 平滑）。
+///
 /// 性能说明：呼吸是 ~0.5Hz 的慢变化，12fps 与 60fps 视觉无差，
 /// 且球体整体走 drawingGroup（内容变化才重新栅格化，缩放/透明度变成便宜的核心动画图层变换），
-/// 光晕用多 stop 渐变代替 blur 滤镜，空闲时 CPU 占用从 60fps + 每帧 blur 的 ~15%+ 降到 3~5%。
+/// 光晕用多 stop 渐变代替 blur 滤镜。
+///
 /// 附带拖拽手势：按住球体任意位置即可把整个悬浮窗拖到任何地方（位置会记住）。
 /// 非空闲状态时，在球脑门上方显示漫画风说话气泡（中文状态提醒），空闲时隐藏。
 /// 布局采用「球体底部锚定」：气泡出现时面板向上增高 bubbleHeight，球心距底边恒为
 /// ballSize，因此球的屏幕位置在气泡显隐切换时保持不变。
+///
+/// 状态来源：只消费 `MoodBallModel`（由 `AppCoordinator.activityState` 派生），
+/// 不接触任何 wire 事件 / DOM（规格 9 / 23）。
 struct MoodBallView: View {
     @ObservedObject var model: MoodBallModel
-    @ObservedObject private var settings: SettingsStore
-
-    init(model: MoodBallModel, settings: SettingsStore) {
-        self.model = model
-        self.settings = settings
-    }
+    @ObservedObject var settings: SettingsStore
 
     /// 按下时鼠标与窗口原点的偏移（全局坐标），拖拽中保持不变
     @State private var grabOffset: CGSize = .zero
     @State private var hasGrabOffset = false
     /// 拖拽按下时的鼠标全局坐标（用于区分「单击」与「拖动」）
     @State private var dragStart: CGPoint?
+    /// 小雨拖拽奔跑方向；用锚点累积细小移动，避免鼠标抖动导致频繁换向。
+    @State private var dragDirection: XiaoyuDragDirection?
+    @State private var dragDirectionAnchorX: CGFloat?
     /// 上次单击时间（用于识别双击 → 兴奋晃动）
     @State private var lastTapAt: Date?
 
     /// 状态气泡总高度（正文 30 + 尾巴 14），气泡出现时面板额外增高的量。
-    /// AppDelegate 同步用它计算面板高度。
+    /// MoodBallCoordinator 同步用它计算面板高度。
     static let bubbleHeight: CGFloat = 44
     /// 气泡尾巴尖端与球头顶部的间距
     static let tailGap: CGFloat = 4
@@ -35,102 +38,29 @@ struct MoodBallView: View {
     var body: some View {
         let d = model.ballSize
         let showBubble = model.bubbleText != nil && settings.showStatusBubble
+        // 心情球绘制在 2d 容器中央；小雨精灵则在同一容器底部对齐。
+        // 气泡尾巴需要分别锚到两种皮肤的可见顶部，否则小雨会多出半个直径的空隙。
+        let bubbleAnchorOffset = bubbleAnchor(for: d)
 
         ZStack(alignment: .top) {
-            // —— 球体层：底部锚定（偏移 bubbleHeight），命中区收窄到球体圆形 ——
-            // 12fps 足够：呼吸周期 2s（24 帧/周期）、眨眼与晃动都是慢动作，60fps 纯属浪费。
-            // （双击兴奋晃动的 1Hz 钟摆 12fps 依然顺滑，无需临时提帧。）
-            TimelineView(.animation(minimumInterval: 1.0 / 12.0)) { timeline in
-                let t = timeline.date.timeIntervalSinceReferenceDate
-                let wave = (sin(t * 2.0 * .pi / model.breathingPeriod) + 1.0) / 2.0 // 0...1
-                let scale = 0.90 + 0.14 * wave
-                let opacity = 0.55 + 0.45 * wave
-                // 眨眼：每 4 秒眨一次，闭眼 0.12s（快）+ 睁眼 0.18s（慢），其余时间全睁
-                let eyeScale = Self.blinkScale(at: t)
-                // 双击兴奋摇动：触发后 2s 内绕底部支点缓慢左右摇动（钟摆式，约 1Hz），幅度线性衰减
-                let wiggleStart = model.wiggleTriggeredAt?.timeIntervalSinceReferenceDate
-                let wiggleTime = wiggleStart.map { t - $0 } ?? 2.0
-                let wiggling = wiggleTime < 2.0
-                let wiggleAngle = wiggling
-                    ? sin(wiggleTime * 2.0 * .pi * 1.0) * (1.0 - wiggleTime / 2.0) * 0.35
-                    : 0
-
-                ZStack {
-                    // 外发光（可在快捷控制/设置面板里关闭）
-                    // 性能点：不用 .blur 滤镜（栅格化时最贵），改用多 stop 径向渐变模拟高斯柔边，
-                    // 视觉几乎无差（endRadius = 帧半宽，边缘正好衰减到 0，无硬边）。
-                    if settings.glowEnabled {
-                        Circle()
-                            .fill(RadialGradient(
-                                stops: [
-                                    .init(color: model.color.opacity(0.60), location: 0),
-                                    .init(color: model.color.opacity(0.30), location: 0.45),
-                                    .init(color: model.color.opacity(0.08), location: 0.75),
-                                    .init(color: model.color.opacity(0.0), location: 1.0),
-                                ],
-                                center: .center,
-                                startRadius: 0,
-                                endRadius: d * 0.85
-                            ))
-                            .frame(width: d * 1.7, height: d * 1.7)
-                    }
-
-                    // 球体本体
-                    Circle()
-                        .fill(RadialGradient(
-                            colors: [model.color, model.color.opacity(0.75)],
-                            center: .topLeading,
-                            startRadius: 0,
-                            endRadius: d
-                        ))
-                        .frame(width: d, height: d)
-                        .shadow(color: settings.glowEnabled ? model.color.opacity(0.8) : .clear, radius: d * 0.16)
-
-                    // 左上高光
-                    Circle()
-                        .fill(RadialGradient(
-                            colors: [Color.white.opacity(0.65), Color.white.opacity(0.0)],
-                            center: UnitPoint(x: 0.35, y: 0.28),
-                            startRadius: 0,
-                            endRadius: d * 0.6
-                        ))
-                        .frame(width: d * 0.82, height: d * 0.82)
-                        .blendMode(.screen)
-
-                    // 眼睛：两个竖椭圆（与网页版心情球一致的比例，120 viewBox 下 cx=46/74, rx=6, ry=11）
-                    // 可在设置面板「外观」里关闭，颜色可切黑白；带眨眼动画（竖向缩放）
-                    if settings.showEyes {
-                        Ellipse()
-                            .fill(settings.eyeColor.color)
-                            .frame(width: d * 0.10, height: d * 0.183)
-                            .offset(x: -d * 0.117, y: 0)
-                            .scaleEffect(x: 1, y: eyeScale, anchor: .center)
-                        Ellipse()
-                            .fill(settings.eyeColor.color)
-                            .frame(width: d * 0.10, height: d * 0.183)
-                            .offset(x: d * 0.117, y: 0)
-                            .scaleEffect(x: 1, y: eyeScale, anchor: .center)
-                    }
-
-                    // stopped 是纯黑球，在深色壁纸上几乎不可见 → 加一圈淡环便于辨认
-                    if model.mood == "stopped" {
-                        Circle()
-                            .strokeBorder(Color.white.opacity(0.30), lineWidth: 2)
-                            .frame(width: d + 6, height: d + 6)
-                    }
+            Group {
+                switch settings.skin {
+                case .moodBall:
+                    moodBallArtwork(diameter: d)
+                        .contentShape(Circle())
+                case .xiaoyu:
+                    XiaoyuSpriteView(
+                        mood: model.mood,
+                        color: model.color,
+                        size: d,
+                        glowEnabled: settings.glowEnabled,
+                        interactionTriggeredAt: model.wiggleTriggeredAt,
+                        dragDirection: dragDirection
+                    )
+                        .contentShape(Rectangle())
                 }
-                // 关键性能点：把「光晕 + 渐变 + 阴影 + 高光 + 眼睛」一次性栅格化成 Metal 图层。
-                // 内容不变时不再每帧重算（blur 不再每帧离屏重栅格化）；
-                // 之后的 scale/opacity/rotation 是便宜的核心动画图层变换。
-                // 注意：必须放在变换之前，变换才能作为图层操作生效。
-                .drawingGroup()
-                .scaleEffect(scale)
-                .opacity(opacity)
-                .rotationEffect(.radians(wiggleAngle), anchor: .bottom)
-                .frame(width: d * 2.0, height: d * 2.0)
             }
             .frame(width: d * 2.0, height: d * 2.0)
-            .contentShape(Circle()) // 只在球体/光晕圆形区域内响应拖拽，四个角不挡操作
             .offset(y: showBubble ? Self.bubbleHeight : 0)
             .gesture(dragGesture)
 
@@ -138,14 +68,98 @@ struct MoodBallView: View {
             ZStack(alignment: .top) {
                 if showBubble, let text = model.bubbleText {
                     SpeechBubble(text: text, color: model.color)
-                        .offset(y: d / 2 - Self.tailGap)
+                        .offset(y: bubbleAnchorOffset - Self.tailGap)
                         .transition(.scale(scale: 0.8, anchor: .bottom).combined(with: .opacity))
                 }
             }
             .animation(.easeInOut(duration: 0.15), value: showBubble)
             .allowsHitTesting(false)
         }
-        .frame(width: d * 2.0, height: d * 2.0 + (showBubble ? Self.bubbleHeight : 0))
+        // 显式顶部对齐非常关键：面板为气泡向上增高时，默认居中会把宠物向下挤半个
+        // bubbleHeight。顶部对齐配合宠物的 bubbleHeight 偏移后，其屏幕底部保持不变。
+        .frame(
+            width: d * 2.0,
+            height: d * 2.0 + (showBubble ? Self.bubbleHeight : 0),
+            alignment: .top
+        )
+    }
+
+    /// 原心情球画面完整保留；只有选择心情球皮肤时才计算呼吸、眨眼和晃动。
+    private func moodBallArtwork(diameter d: CGFloat) -> some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 12.0)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let wave = (sin(t * 2.0 * .pi / model.breathingPeriod) + 1.0) / 2.0
+            let scale = 0.90 + 0.14 * wave
+            let opacity = 0.55 + 0.45 * wave
+            let eyeScale = Self.blinkScale(at: t)
+            let wiggleStart = model.wiggleTriggeredAt?.timeIntervalSinceReferenceDate
+            let wiggleTime = wiggleStart.map { t - $0 } ?? 2.0
+            let wiggleAngle = wiggleTime < 2.0
+                ? sin(wiggleTime * 2.0 * .pi) * (1.0 - wiggleTime / 2.0) * 0.35
+                : 0
+
+            ZStack {
+                if settings.glowEnabled {
+                    Circle()
+                        .fill(RadialGradient(
+                            stops: [
+                                .init(color: model.color.opacity(0.60), location: 0),
+                                .init(color: model.color.opacity(0.30), location: 0.45),
+                                .init(color: model.color.opacity(0.08), location: 0.75),
+                                .init(color: model.color.opacity(0), location: 1),
+                            ],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: d * 0.85
+                        ))
+                        .frame(width: d * 1.7, height: d * 1.7)
+                }
+
+                Circle()
+                    .fill(RadialGradient(
+                        colors: [model.color, model.color.opacity(0.75)],
+                        center: .topLeading,
+                        startRadius: 0,
+                        endRadius: d
+                    ))
+                    .frame(width: d, height: d)
+                    .shadow(color: settings.glowEnabled ? model.color.opacity(0.8) : .clear, radius: d * 0.16)
+
+                Circle()
+                    .fill(RadialGradient(
+                        colors: [Color.white.opacity(0.65), Color.white.opacity(0)],
+                        center: UnitPoint(x: 0.35, y: 0.28),
+                        startRadius: 0,
+                        endRadius: d * 0.6
+                    ))
+                    .frame(width: d * 0.82, height: d * 0.82)
+                    .blendMode(.screen)
+
+                if settings.showEyes {
+                    ForEach([-CGFloat(1), CGFloat(1)], id: \.self) { direction in
+                        Ellipse()
+                            .fill(settings.eyeColor.color)
+                            .frame(width: d * 0.10, height: d * 0.183)
+                            .offset(x: direction * d * 0.117)
+                            .scaleEffect(x: 1, y: eyeScale, anchor: .center)
+                    }
+                }
+            }
+            .drawingGroup()
+            .scaleEffect(scale)
+            .opacity(opacity)
+            .rotationEffect(.radians(wiggleAngle), anchor: .bottom)
+            .frame(width: d * 2, height: d * 2)
+        }
+    }
+
+    private func bubbleAnchor(for diameter: CGFloat) -> CGFloat {
+        switch settings.skin {
+        case .moodBall:
+            return diameter / 2
+        case .xiaoyu:
+            return diameter
+        }
     }
 
     /// 眨眼竖向缩放：周期 4s，闭眼 0.12s（快）+ 睁眼 0.18s（慢），其余全睁（1.0）。
@@ -169,7 +183,7 @@ struct MoodBallView: View {
 
     /// 拖拽：让窗口跟随鼠标的全局位置（抓取点保持在光标下），
     /// 不依赖手势 translation，避免窗口移动后坐标系反馈导致拖拽缩水。
-    /// 单击无操作；双击触发兴奋晃动；锁定位置时不可拖拽。
+    /// 单击无操作；双击触发宠物动作并展开主 App；锁定位置时不可拖拽。
     private var dragGesture: some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { _ in
@@ -182,10 +196,22 @@ struct MoodBallView: View {
                         height: mouse.y - panel.frame.origin.y
                     )
                     dragStart = mouse
+                    dragDirectionAnchorX = mouse.x
                     hasGrabOffset = true
                 }
-                // 锁定位置：不移动窗口（仍允许单击弹出快捷控制）
-                if settings.lockPosition { return }
+                // 锁定位置：不移动窗口（仍允许单击）
+                if settings.lockPosition {
+                    dragDirection = nil
+                    dragDirectionAnchorX = nil
+                    return
+                }
+                if let anchorX = dragDirectionAnchorX,
+                   let direction = XiaoyuDragDirection.direction(
+                       forHorizontalDelta: mouse.x - anchorX
+                   ) {
+                    dragDirection = direction
+                    dragDirectionAnchorX = mouse.x
+                }
                 panel.setFrameOrigin(NSPoint(
                     x: mouse.x - grabOffset.width,
                     y: mouse.y - grabOffset.height
@@ -193,13 +219,11 @@ struct MoodBallView: View {
             }
             .onEnded { _ in
                 guard let panel = MoodBallPanel.current else {
-                    dragStart = nil
-                    hasGrabOffset = false
-                    grabOffset = .zero
+                    resetDragTracking(panel: nil)
                     return
                 }
                 let mouse = NSEvent.mouseLocation
-                // 几乎没移动 → 单击：切换球上快捷控制面板
+                // 几乎没移动 → 单击
                 let isTap: Bool
                 if let start = dragStart {
                     isTap = hypot(mouse.x - start.x, mouse.y - start.y) < 4
@@ -207,7 +231,7 @@ struct MoodBallView: View {
                     isTap = false
                 }
                 if isTap {
-                    // 双击（0.35s 内两次单击）→ 兴奋晃动；单击无操作
+                    // 双击（0.35s 内两次单击）→ 宠物动作 + 恢复主窗口；单击无操作
                     let now = Date()
                     if let last = lastTapAt, now.timeIntervalSince(last) < 0.35 {
                         lastTapAt = nil
@@ -215,17 +239,11 @@ struct MoodBallView: View {
                     } else {
                         lastTapAt = now
                     }
-                    dragStart = nil
-                    hasGrabOffset = false
-                    grabOffset = .zero
-                    panel.isDragging = false
+                    resetDragTracking(panel: panel)
                     return
                 }
                 if settings.lockPosition {
-                    dragStart = nil
-                    hasGrabOffset = false
-                    grabOffset = .zero
-                    panel.isDragging = false
+                    resetDragTracking(panel: panel)
                     return
                 }
                 // 抬手时把抓取点精确归位到光标下，消除事件延迟造成的残差
@@ -235,15 +253,20 @@ struct MoodBallView: View {
                         y: mouse.y - grabOffset.height
                     ))
                 }
-                dragStart = nil
-                hasGrabOffset = false
-                grabOffset = .zero
-                panel.isDragging = false
+                resetDragTracking(panel: panel)
                 panel.persistPosition()
             }
     }
-}
 
+    private func resetDragTracking(panel: MoodBallPanel?) {
+        dragStart = nil
+        dragDirection = nil
+        dragDirectionAnchorX = nil
+        hasGrabOffset = false
+        grabOffset = .zero
+        panel?.isDragging = false
+    }
+}
 // MARK: - 状态气泡（漫画风说话框）
 
 /// 漫画风说话气泡：圆角矩形白底 + 状态色描边 + 底部小三角尾巴指向球脑门。
@@ -255,7 +278,7 @@ struct SpeechBubble: View {
         VStack(spacing: 0) {
             Text(text)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.black.opacity(0.8))
+                .foregroundStyle(.black.opacity(0.8))
                 .lineLimit(1)
                 .frame(height: 30)
                 .padding(.horizontal, 14)
