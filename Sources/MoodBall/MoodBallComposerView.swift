@@ -6,8 +6,21 @@ import SwiftUI
 struct MoodBallComposerView: View {
     @ObservedObject var model: MoodBallModel
     @ObservedObject var command: MoodBallCommandClient
+    @ObservedObject private var settings = SettingsStore.shared
+
+    @State private var miniGrabOffset: CGSize = .zero
+    @State private var hasMiniGrabOffset = false
 
     var body: some View {
+        if settings.displayMode == .controlsOnly && model.composerPhase != .expanded {
+            miniControlBar
+        } else {
+            standardComposer
+        }
+    }
+
+    @ViewBuilder
+    private var standardComposer: some View {
         switch model.composerPhase {
         case .resting:
             Capsule(style: .continuous)
@@ -33,6 +46,68 @@ struct MoodBallComposerView: View {
         case .expanded:
             expandedComposer
         }
+    }
+
+    private var miniControlBar: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 24, height: 26)
+                .contentShape(Rectangle())
+                .gesture(miniDragGesture)
+                .accessibilityLabel("拖动 Mini 控件")
+
+            Button {
+                model.openComposer(focus: true)
+            } label: {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.primary.opacity(0.78))
+                    .frame(width: 32, height: 26)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("输入消息")
+        }
+        .padding(.horizontal, 6)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().stroke(.white.opacity(0.25), lineWidth: 0.7))
+        .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+        .frame(width: 104, height: 34)
+    }
+
+    private var miniDragGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { _ in
+                guard settings.clickThroughMode != .always,
+                      let panel = MoodBallComposerPanel.current else { return }
+                let mouse = NSEvent.mouseLocation
+                if !hasMiniGrabOffset {
+                    panel.isMiniDragging = true
+                    miniGrabOffset = CGSize(
+                        width: mouse.x - panel.frame.origin.x,
+                        height: mouse.y - panel.frame.origin.y
+                    )
+                    hasMiniGrabOffset = true
+                }
+                panel.setFrameOrigin(NSPoint(
+                    x: mouse.x - miniGrabOffset.width,
+                    y: mouse.y - miniGrabOffset.height
+                ))
+            }
+            .onEnded { _ in
+                if let panel = MoodBallComposerPanel.current, hasMiniGrabOffset {
+                    let frame = panel.frame
+                    let position = CGPoint(x: frame.minX, y: frame.minY)
+                    panel.transientMiniPosition = position
+                    if settings.rememberPosition {
+                        settings.savedMiniPosition = position
+                    }
+                    panel.isMiniDragging = false
+                }
+                hasMiniGrabOffset = false
+                miniGrabOffset = .zero
+            }
     }
 
     private var expandedComposer: some View {
@@ -108,7 +183,8 @@ struct MoodBallComposerView: View {
                     MoodBallTextView(
                         text: $command.draft,
                         onSubmit: { model.submitDraft() },
-                        onEscape: { model.collapseComposer() }
+                        onEscape: { model.collapseComposer() },
+                        focusRequest: model.composerFocusRequest
                     )
                 }
                 .frame(minHeight: 44, maxHeight: 104)
@@ -173,6 +249,7 @@ struct MoodBallTextView: NSViewRepresentable {
     @Binding var text: String
     let onSubmit: () -> Void
     let onEscape: () -> Void
+    let focusRequest: Int
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -212,10 +289,17 @@ struct MoodBallTextView: NSViewRepresentable {
         guard let textView = scroll.documentView as? NSTextView else { return }
         if textView.string != text { textView.string = text }
         context.coordinator.parent = self
+        if context.coordinator.lastFocusRequest != focusRequest {
+            context.coordinator.lastFocusRequest = focusRequest
+            DispatchQueue.main.async {
+                scroll.window?.makeFirstResponder(textView)
+            }
+        }
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: MoodBallTextView
+        var lastFocusRequest: Int?
 
         init(_ parent: MoodBallTextView) { self.parent = parent }
 

@@ -56,6 +56,14 @@ final class MoodBallPanel: NSPanel {
 /// Separate control surface below the pet. Keeping it in its own panel means
 /// expanding the composer never changes the pet window's drag anchor or size.
 final class MoodBallComposerPanel: NSPanel {
+    static weak var current: MoodBallComposerPanel?
+
+    /// Prevent hover updates from snapping the panel back to its saved origin
+    /// while the Mini drag gesture is moving it.
+    var isMiniDragging = false
+    /// Session-only Mini origin used when the user disables position saving.
+    var transientMiniPosition: CGPoint?
+
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
     override var acceptsFirstResponder: Bool { true }
@@ -74,12 +82,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var bubbleSink: AnyCancellable?
     private var composerSink: AnyCancellable?
     private var commandSink: AnyCancellable?
+    private var hotKeySink: AnyCancellable?
     private var resignObserver: NSObjectProtocol?
     private var statusItem: NSStatusItem?
     private var statusSink: AnyCancellable?
     private var statusHeaderItem: NSMenuItem?
     private var toggleMenuItem: NSMenuItem?
+    private var togglePetMenuItem: NSMenuItem?
+    private var shortcutMenuItems: [MoodBallShortcutAction: [NSMenuItem]] = [:]
     private var lastIconColor: Color?
+    private let globalHotKeyManager = GlobalHotKeyManager()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 单实例守卫：若已有同 Bundle ID 的实例在运行，本实例立即退出。
@@ -99,6 +111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         setupPanel()
         setupComposerPanel()
+        setupGlobalHotKey()
         model.start()
         startHoverMonitor()
         observeVisibility()
@@ -143,6 +156,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         composerSink = nil
         commandSink?.cancel()
         commandSink = nil
+        hotKeySink?.cancel()
+        hotKeySink = nil
         if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
         resignObserver = nil
     }
@@ -178,7 +193,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             positionAtBottomRight(panel)
         }
         MoodBallPanel.current = panel
-        if SettingsStore.shared.isBallVisible {
+        if SettingsStore.shared.isBallVisible,
+           SettingsStore.shared.displayMode == .petAndControls {
             panel.orderFrontRegardless()
         }
         self.panel = panel
@@ -203,6 +219,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         p.isExcludedFromWindowsMenu = true
         p.contentView = NSHostingView(rootView: MoodBallComposerView(model: model, command: model.commandClient))
         self.composerPanel = p
+        MoodBallComposerPanel.current = p
         updateComposerPanel()
     }
 
@@ -220,6 +237,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func screenParametersChanged() {
+        if isMiniMode {
+            guard let composerPanel, composerPanel.isVisible else { return }
+            let center = NSPoint(x: composerPanel.frame.midX, y: composerPanel.frame.midY)
+            let centerOnScreen = NSScreen.screens.map(\.visibleFrame).contains { $0.contains(center) }
+            if !centerOnScreen {
+                positionAtBottomRight(composerPanel)
+                let miniOrigin = Self.miniOrigin(for: composerPanel.frame)
+                composerPanel.transientMiniPosition = miniOrigin
+                if SettingsStore.shared.rememberPosition {
+                    SettingsStore.shared.savedMiniPosition = miniOrigin
+                }
+            }
+            return
+        }
         guard let panel, panel.isVisible else { return }
         // 显示器增删/分辨率变化后，若窗口中心不在任何屏幕的可视区内
         // （可能只留一截在屏边、球心已甩到无屏幕区域，导致拖不到），
@@ -234,6 +265,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func resetPositionRequested() {
+        if isMiniMode, let composerPanel {
+            positionAtBottomRight(composerPanel)
+            let miniOrigin = Self.miniOrigin(for: composerPanel.frame)
+            composerPanel.transientMiniPosition = miniOrigin
+            if SettingsStore.shared.rememberPosition {
+                SettingsStore.shared.savedMiniPosition = miniOrigin
+            }
+            return
+        }
         guard let panel else { return }
         positionAtBottomRight(panel)
     }
@@ -319,27 +359,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateHover() {
-        guard let panel, panel.isVisible else { return }
+        let settings = SettingsStore.shared
+        let isMini = settings.displayMode == .controlsOnly
+        guard panel?.isVisible == true || (isMini && composerPanel?.isVisible == true) else { return }
         let mouse = NSEvent.mouseLocation
-        let d = SettingsStore.shared.ballSize
-        let ballCenter = NSPoint(x: panel.frame.midX, y: panel.frame.minY + d)
-        let insideBall = hypot(mouse.x - ballCenter.x, mouse.y - ballCenter.y) <= d
+        let d = settings.ballSize
+        let insideBall: Bool
+        if let panel, panel.isVisible {
+            let ballCenter = NSPoint(x: panel.frame.midX, y: panel.frame.minY + d)
+            insideBall = hypot(mouse.x - ballCenter.x, mouse.y - ballCenter.y) <= d
+        } else {
+            insideBall = false
+        }
 
-        if SettingsStore.shared.clickThroughMode != .always,
+        if settings.clickThroughMode != .always,
            model.composerPhase != .expanded {
             let controlFrame = composerPanel?.frame.insetBy(dx: -14, dy: -18)
-            let bridgeFrame = NSRect(
-                x: min(panel.frame.minX, composerPanel?.frame.minX ?? panel.frame.minX) - 14,
-                y: min(panel.frame.minY, composerPanel?.frame.minY ?? panel.frame.minY) - 18,
-                width: max(panel.frame.maxX, composerPanel?.frame.maxX ?? panel.frame.maxX)
-                    - min(panel.frame.minX, composerPanel?.frame.minX ?? panel.frame.minX) + 28,
-                height: abs(panel.frame.minY - (composerPanel?.frame.maxY ?? panel.frame.minY)) + 36
-            )
-            model.setComposerHovering(insideBall || controlFrame?.contains(mouse) == true || bridgeFrame.contains(mouse))
+            let bridgeFrame: NSRect?
+            if let panel, panel.isVisible {
+                let minX = min(panel.frame.minX, composerPanel?.frame.minX ?? panel.frame.minX) - 14
+                let minY = min(panel.frame.minY, composerPanel?.frame.minY ?? panel.frame.minY) - 18
+                bridgeFrame = NSRect(
+                    x: minX,
+                    y: minY,
+                    width: max(panel.frame.maxX, composerPanel?.frame.maxX ?? panel.frame.maxX) - minX + 14,
+                    height: max(panel.frame.maxY, composerPanel?.frame.maxY ?? panel.frame.maxY) - minY + 18
+                )
+            } else {
+                bridgeFrame = nil
+            }
+            model.setComposerHovering(insideBall || controlFrame?.contains(mouse) == true || bridgeFrame?.contains(mouse) == true)
         }
         updateComposerPanel()
 
-        switch SettingsStore.shared.clickThroughMode {
+        guard let panel, panel.isVisible else { return }
+        switch settings.clickThroughMode {
         case .always:
             // 永远穿透：常驻忽略鼠标事件（不可拖拽）
             if !panel.ignoresMouseEvents { panel.ignoresMouseEvents = true }
@@ -384,28 +438,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateComposerPanel() {
         guard let composerPanel else { return }
-        guard SettingsStore.shared.isBallVisible, panel?.isVisible == true else {
+        let settings = SettingsStore.shared
+        guard settings.isBallVisible else {
             composerPanel.orderOut(nil)
             return
         }
 
         let size: NSSize
-        switch model.composerPhase {
-        case .resting:
-            size = NSSize(width: 72, height: 18)
-        case .hovering:
-            size = NSSize(width: 48, height: 34)
-        case .expanded:
-            size = NSSize(width: 340, height: 132)
+        if settings.displayMode == .controlsOnly {
+            switch model.composerPhase {
+            case .resting, .hovering:
+                size = NSSize(width: 104, height: 34)
+            case .expanded:
+                size = NSSize(width: 340, height: 132)
+            }
+        } else {
+            switch model.composerPhase {
+            case .resting:
+                size = NSSize(width: 72, height: 18)
+            case .hovering:
+                size = NSSize(width: 48, height: 34)
+            case .expanded:
+                size = NSSize(width: 340, height: 132)
+            }
         }
-        composerPanel.setFrame(composerFrame(size: size), display: true)
-        composerPanel.ignoresMouseEvents = model.composerPhase != .expanded
-            && SettingsStore.shared.clickThroughMode != .never
-            && model.composerPhase != .hovering
+        if !composerPanel.isMiniDragging {
+            composerPanel.setFrame(composerFrame(size: size), display: true)
+        }
+        if model.composerPhase == .expanded {
+            composerPanel.ignoresMouseEvents = false
+        } else if isMiniMode {
+            composerPanel.ignoresMouseEvents = settings.clickThroughMode == .always
+        } else {
+            composerPanel.ignoresMouseEvents = settings.clickThroughMode != .never
+                && model.composerPhase != .hovering
+        }
         composerPanel.orderFrontRegardless()
     }
 
+    private var isMiniMode: Bool {
+        SettingsStore.shared.displayMode == .controlsOnly
+    }
+
     private func composerFrame(size: NSSize) -> NSRect {
+        let settings = SettingsStore.shared
+        if settings.displayMode == .controlsOnly,
+           let saved = settings.rememberPosition
+                ? settings.savedMiniPosition
+                : composerPanel?.transientMiniPosition {
+            let oldSize = NSSize(width: 104, height: 34)
+            let center = NSPoint(x: saved.x + oldSize.width / 2, y: saved.y + oldSize.height / 2)
+            return clampedComposerFrame(
+                NSRect(
+                    x: center.x - size.width / 2,
+                    y: center.y - size.height / 2,
+                    width: size.width,
+                    height: size.height
+                )
+            )
+        }
         guard let panel else { return NSRect(origin: .zero, size: size) }
         let centerX = panel.frame.midX
         let screen = NSScreen.screens.first(where: { $0.visibleFrame.contains(NSPoint(x: centerX, y: panel.frame.midY)) })
@@ -428,24 +519,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 visible.maxY - size.height - petControlGap
             )
         }
-        return NSRect(x: x, y: y, width: size.width, height: size.height)
+        return clampedComposerFrame(NSRect(x: x, y: y, width: size.width, height: size.height))
+    }
+
+    private static func miniOrigin(for frame: NSRect) -> CGPoint {
+        let miniSize = NSSize(width: 104, height: 34)
+        return CGPoint(
+            x: frame.midX - miniSize.width / 2,
+            y: frame.midY - miniSize.height / 2
+        )
+    }
+
+    private func clampedComposerFrame(_ frame: NSRect) -> NSRect {
+        let center = NSPoint(x: frame.midX, y: frame.midY)
+        let screen = NSScreen.screens.first(where: { $0.visibleFrame.contains(center) })
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+        guard let visible = screen?.visibleFrame else { return frame }
+        let inset: CGFloat = 4
+        let x = min(max(frame.minX, visible.minX + inset), max(visible.minX + inset, visible.maxX - frame.width - inset))
+        let y = min(max(frame.minY, visible.minY + inset), max(visible.minY + inset, visible.maxY - frame.height - inset))
+        return NSRect(x: x, y: y, width: frame.width, height: frame.height)
     }
 
     // MARK: - 菜单栏动作（通过 model.isBallVisible 驱动，避免依赖 NSApp.delegate 类型）
 
     private func observeVisibility() {
-        visibilitySink = SettingsStore.shared.$isBallVisible
+        visibilitySink = Publishers.CombineLatest(
+            SettingsStore.shared.$isBallVisible,
+            SettingsStore.shared.$displayMode
+        )
             .receive(on: RunLoop.main)
-            .sink { [weak self] visible in
-                guard let self, let panel = self.panel else { return }
-                if visible {
-                    if !panel.isVisible {
-                        panel.orderFrontRegardless() // 恢复显示时回到上次拖拽的位置，不重置
+            .sink { [weak self] visible, displayMode in
+                guard let self else { return }
+                if visible, displayMode == .petAndControls {
+                    if let panel = self.panel, !panel.isVisible {
+                        panel.orderFrontRegardless()
                     }
-                } else if panel.isVisible {
-                    panel.orderOut(nil)
+                } else {
+                    self.panel?.orderOut(nil)
                 }
-                appLog.info("visibility sink: visible=\(visible, privacy: .public) panelIsVisible=\(panel.isVisible, privacy: .public)")
+                self.updateComposerPanel()
+                self.updateHover()
+                appLog.info("display surfaces: visible=\(visible, privacy: .public) mode=\(displayMode.rawValue, privacy: .public)")
             }
     }
 
@@ -468,37 +584,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
-        toggleMenuItem = NSMenuItem(
-            title: model.isBallVisible ? "隐藏悬浮球" : "显示悬浮球",
-            action: #selector(toggleBallVisibility),
-            keyEquivalent: ""
+        toggleMenuItem = makeShortcutMenuItem(
+            action: .toggleBallVisibility,
+            title: model.isBallVisible ? "隐藏全部" : "显示全部",
+            selector: #selector(toggleBallVisibility)
         )
-        toggleMenuItem?.target = self
         menu.addItem(toggleMenuItem!)
 
-        let inputItem = NSMenuItem(title: "输入消息", action: #selector(inputMessageFromMenu), keyEquivalent: "n")
-        inputItem.target = self
-        menu.addItem(inputItem)
+        togglePetMenuItem = makeShortcutMenuItem(
+            action: .togglePetVisibility,
+            title: isMiniMode ? "显示桌宠形象" : "隐藏桌宠形象",
+            selector: #selector(togglePetVisibility)
+        )
+        menu.addItem(togglePetMenuItem!)
 
-        let newSessionItem = NSMenuItem(title: "新建会话", action: #selector(newSessionFromMenu), keyEquivalent: "")
-        newSessionItem.target = self
-        menu.addItem(newSessionItem)
-
-        let workspaceItem = NSMenuItem(title: "选择工作区", action: #selector(selectWorkspaceFromMenu), keyEquivalent: "")
-        workspaceItem.target = self
-        menu.addItem(workspaceItem)
-
-        let openHarnessItem = NSMenuItem(title: "打开 Harness", action: #selector(openHarnessFromMenu), keyEquivalent: "")
-        openHarnessItem.target = self
-        menu.addItem(openHarnessItem)
-
-        let settingsItem = NSMenuItem(title: "设置…", action: #selector(toggleSettingsPanel), keyEquivalent: ",")
-        settingsItem.target = self
-        menu.addItem(settingsItem)
-
-        let previewItem = NSMenuItem(title: "状态展示…", action: #selector(toggleStatePreviewPanel), keyEquivalent: "d")
-        previewItem.target = self
-        menu.addItem(previewItem)
+        menu.addItem(makeShortcutMenuItem(
+            action: .inputMessage,
+            title: "输入消息",
+            selector: #selector(inputMessageFromMenu)
+        ))
+        menu.addItem(makeShortcutMenuItem(
+            action: .newSession,
+            title: "新建会话",
+            selector: #selector(newSessionFromMenu)
+        ))
+        menu.addItem(makeShortcutMenuItem(
+            action: .selectWorkspace,
+            title: "选择工作区",
+            selector: #selector(selectWorkspaceFromMenu)
+        ))
+        menu.addItem(makeShortcutMenuItem(
+            action: .openHarness,
+            title: "打开 Harness",
+            selector: #selector(openHarnessFromMenu)
+        ))
+        menu.addItem(makeShortcutMenuItem(
+            action: .openSettings,
+            title: "设置…",
+            selector: #selector(toggleSettingsPanel)
+        ))
+        menu.addItem(makeShortcutMenuItem(
+            action: .statePreview,
+            title: "状态展示…",
+            selector: #selector(toggleStatePreviewPanel)
+        ))
 
         menu.addItem(.separator())
 
@@ -538,11 +667,88 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.button?.toolTip = model.statusText
         item.button?.setAccessibilityLabel(model.statusText)
         statusHeaderItem?.title = model.statusText
-        toggleMenuItem?.title = model.isBallVisible ? "隐藏悬浮球" : "显示悬浮球"
+        toggleMenuItem?.title = model.isBallVisible ? "隐藏全部" : "显示全部"
+        togglePetMenuItem?.title = isMiniMode ? "显示桌宠形象" : "隐藏桌宠形象"
+        applyMenuShortcuts()
+    }
+
+    private func makeShortcutMenuItem(
+        action: MoodBallShortcutAction,
+        title: String,
+        selector: Selector
+    ) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: selector, keyEquivalent: "")
+        item.target = self
+        shortcutMenuItems[action, default: []].append(item)
+        return item
+    }
+
+    private func applyMenuShortcuts() {
+        let settings = SettingsStore.shared
+        for action in MoodBallShortcutAction.allCases {
+            let configuration = settings.shortcutConfiguration(for: action)
+            let keyEquivalent = configuration.isEnabled && settings.shortcutConflict(for: action) == nil
+                ? configuration.menuKeyEquivalent
+                : nil
+            let modifierMask = configuration.modifiers.intersection([.command, .option, .control, .shift])
+            for item in shortcutMenuItems[action, default: []] {
+                item.keyEquivalent = keyEquivalent ?? ""
+                item.keyEquivalentModifierMask = keyEquivalent == nil ? [] : modifierMask
+            }
+        }
     }
 
     @objc private func toggleBallVisibility() {
         model.isBallVisible.toggle()
+    }
+
+    @objc private func togglePetVisibility() {
+        SettingsStore.shared.displayMode = isMiniMode ? .petAndControls : .controlsOnly
+    }
+
+    // MARK: - 全局快捷键
+
+    private func setupGlobalHotKey() {
+        globalHotKeyManager.onTrigger = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.showComposerFromGlobalHotKey()
+            }
+        }
+        hotKeySink = Publishers.CombineLatest3(
+            SettingsStore.shared.$globalHotKeyEnabled,
+            SettingsStore.shared.$globalHotKeyKeyCode,
+            SettingsStore.shared.$globalHotKeyModifiers
+        )
+        .receive(on: RunLoop.main)
+        .sink { [weak self] _, _, _ in
+            self?.applyGlobalHotKeyConfiguration()
+        }
+        applyGlobalHotKeyConfiguration()
+    }
+
+    private func applyGlobalHotKeyConfiguration() {
+        let settings = SettingsStore.shared
+        let result = globalHotKeyManager.update(settings.globalHotKeyConfiguration)
+        switch result {
+        case .success:
+            settings.setGlobalHotKeyStatus(nil)
+        case .failure(let error):
+            settings.setGlobalHotKeyStatus(error.localizedDescription + "；已保留上一次有效快捷键")
+        }
+    }
+
+    private func showComposerFromGlobalHotKey() {
+        // The shortcut remains useful after the user hides everything: reveal
+        // the control surface, while respecting Mini mode's hidden pet.
+        if !SettingsStore.shared.isBallVisible {
+            SettingsStore.shared.isBallVisible = true
+        }
+        model.openComposer(focus: true)
+        NSApp.activate(ignoringOtherApps: true)
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let composerPanel = self.composerPanel else { return }
+            composerPanel.makeKeyAndOrderFront(nil)
+        }
     }
 
     /// 自绘菜单栏图标：mood 颜色圆球 + 两只镂空小圆点眼睛（非模板图片）。
@@ -586,13 +792,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "关于 心情球", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "输入消息", action: #selector(inputMessageFromMenu), keyEquivalent: "n")
-        appMenu.addItem(withTitle: "新建会话", action: #selector(newSessionFromMenu), keyEquivalent: "")
-        appMenu.addItem(withTitle: "选择工作区", action: #selector(selectWorkspaceFromMenu), keyEquivalent: "")
-        appMenu.addItem(withTitle: "打开 Harness", action: #selector(openHarnessFromMenu), keyEquivalent: "")
+        appMenu.addItem(makeShortcutMenuItem(
+            action: .inputMessage,
+            title: "输入消息",
+            selector: #selector(inputMessageFromMenu)
+        ))
+        appMenu.addItem(makeShortcutMenuItem(
+            action: .newSession,
+            title: "新建会话",
+            selector: #selector(newSessionFromMenu)
+        ))
+        appMenu.addItem(makeShortcutMenuItem(
+            action: .selectWorkspace,
+            title: "选择工作区",
+            selector: #selector(selectWorkspaceFromMenu)
+        ))
+        appMenu.addItem(makeShortcutMenuItem(
+            action: .openHarness,
+            title: "打开 Harness",
+            selector: #selector(openHarnessFromMenu)
+        ))
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "设置…", action: #selector(toggleSettingsPanel), keyEquivalent: ",")
-        appMenu.addItem(withTitle: "状态展示…", action: #selector(toggleStatePreviewPanel), keyEquivalent: "d")
+        appMenu.addItem(makeShortcutMenuItem(
+            action: .openSettings,
+            title: "设置…",
+            selector: #selector(toggleSettingsPanel)
+        ))
+        appMenu.addItem(makeShortcutMenuItem(
+            action: .statePreview,
+            title: "状态展示…",
+            selector: #selector(toggleStatePreviewPanel)
+        ))
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "退出 心情球", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appMenuItem.submenu = appMenu
@@ -611,13 +841,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mainMenu.addItem(editMenuItem)
 
         NSApp.mainMenu = mainMenu
+        applyMenuShortcuts()
     }
 
     // MARK: - Harness 输入入口
 
     @objc private func inputMessageFromMenu() {
-        model.openComposer()
-        NSApp.activate(ignoringOtherApps: true)
+        showComposerFromGlobalHotKey()
     }
 
     @objc private func newSessionFromMenu() {

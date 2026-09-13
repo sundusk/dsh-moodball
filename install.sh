@@ -527,6 +527,34 @@ choose_app_destination() {
     fi
 }
 
+stop_running_moodball() {
+    local pid command
+
+    while read -r pid command; do
+        [ -n "$pid" ] || continue
+        case "$command" in
+            */MoodBall.app/Contents/MacOS/MoodBall)
+                kill "$pid" 2>/dev/null || true
+                ;;
+        esac
+    done < <(ps -axo pid=,command=)
+    sleep 1
+}
+
+cleanup_duplicate_apps() {
+    local candidate
+
+    for candidate in \
+        "/Applications/MoodBall.app" \
+        "$HOME/Applications/MoodBall.app" \
+        "$PWD/dist/MoodBall.app"; do
+        [ "$candidate" = "$APP_DEST" ] && continue
+        [ -d "$candidate" ] || continue
+        info "清理重复 MoodBall.app：$candidate"
+        /usr/bin/trash "$candidate"
+    done
+}
+
 install_app() {
     choose_app_destination
     mkdir -p "$(dirname "$APP_DEST")"
@@ -536,13 +564,14 @@ install_app() {
     APP_STAGE="$(mktemp -d "$(dirname "$APP_DEST")/.MoodBall.install.XXXXXX")"
     cp -R "$APP_SRC" "$APP_STAGE/MoodBall.app"
     if [ -d "$APP_DEST" ]; then
-        rm -rf "$APP_DEST"
+        /usr/bin/trash "$APP_DEST"
     fi
     mv "$APP_STAGE/MoodBall.app" "$APP_DEST"
     rm -rf "$APP_STAGE"
     APP_STAGE=""
     xattr -dr com.apple.quarantine "$APP_DEST" 2>/dev/null || true
     ok "MoodBall.app 已安装到 $APP_DEST"
+    cleanup_duplicate_apps
 }
 
 # ---------------------------------------------------------------- 1. 检查 macOS
@@ -685,6 +714,7 @@ if [ -d "/Applications/Waterball.app" ]; then
     ok "旧版 Waterball.app 已移除"
 fi
 
+stop_running_moodball
 install_app
 APP_TMP=""
 

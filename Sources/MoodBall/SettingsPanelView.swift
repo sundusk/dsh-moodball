@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 设置面板：外观 / 颜色 / 行为 三个 Tab，顶部带实时预览小球。
+/// 设置面板：外观 / 颜色 / 行为 / 快捷键四个 Tab，顶部带实时预览小球。
 struct SettingsPanelView: View {
     @ObservedObject private var settings = SettingsStore.shared
     @State private var tab: Tab = .appearance
@@ -9,6 +9,7 @@ struct SettingsPanelView: View {
         case appearance = "外观"
         case colors = "颜色"
         case behavior = "行为"
+        case shortcuts = "快捷键"
         var id: String { rawValue }
     }
 
@@ -16,7 +17,11 @@ struct SettingsPanelView: View {
         VStack(spacing: 0) {
             // 顶部实时预览（跟随当前设置的渲染）
             PreviewBall(settings: settings)
-                .frame(height: 150)
+                // XiaoyuSpriteView 包含约 2 倍宠物尺寸的透明命中区域；
+                // 预览区固定高度时必须底部对齐，否则透明区域会把可见宠物
+                // 推到分段按钮上方。裁剪也保证未来更大的光晕不会越界。
+                .frame(height: 150, alignment: .bottom)
+                .clipped()
                 .frame(maxWidth: .infinity)
                 .background(Color.black.opacity(0.05))
 
@@ -34,6 +39,7 @@ struct SettingsPanelView: View {
                 case .appearance: AppearanceTab(settings: settings)
                 case .colors: ColorsTab(settings: settings)
                 case .behavior: BehaviorTab(settings: settings)
+                case .shortcuts: ShortcutsTab(settings: settings)
                 }
             }
             .padding(.horizontal, 16)
@@ -41,6 +47,12 @@ struct SettingsPanelView: View {
         }
         .frame(width: 420, height: 520)
     }
+}
+
+private enum SettingsLayout {
+    static let shortcutLabelWidth: CGFloat = 112
+    static let shortcutToggleWidth: CGFloat = 52
+    static let shortcutRecorderWidth: CGFloat = 168
 }
 
 // MARK: - 实时预览
@@ -125,7 +137,26 @@ private struct AppearanceTab: View {
                 .pickerStyle(.menu)
             }
 
-            Toggle("显示桌宠", isOn: Binding(
+            LabeledContent("显示模式") {
+                Picker("显示模式", selection: Binding(
+                    get: { settings.displayMode },
+                    set: { settings.displayMode = $0 }
+                )) {
+                    ForEach(FloatingDisplayMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+            }
+
+            Text(settings.displayMode == .controlsOnly
+                ? "Mini 模式只显示快捷控件；它的位置与桌宠位置分开保存，可独立拖动。"
+                : "显示桌宠和快捷控件；两者会围绕桌宠位置排列。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Toggle("显示全部（桌宠＋控件）", isOn: Binding(
                 get: { settings.isBallVisible },
                 set: { settings.isBallVisible = $0 }
             ))
@@ -338,6 +369,135 @@ private struct BehaviorTab: View {
             UpdateSection()
         }
         .padding(.vertical, 8)
+    }
+}
+
+// MARK: - 快捷键
+
+private struct ShortcutsTab: View {
+    @ObservedObject var settings: SettingsStore
+    @State private var isRecordingHotKey = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("设置一个可在任意应用中唤起 MoodBall 输入框的全局快捷键。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack(alignment: .center, spacing: 12) {
+                Text("全局快捷键")
+                    .frame(width: SettingsLayout.shortcutLabelWidth, alignment: .leading)
+                    .lineLimit(1)
+                Toggle("启用", isOn: Binding(
+                    get: { settings.globalHotKeyEnabled },
+                    set: { settings.globalHotKeyEnabled = $0 }
+                ))
+                .toggleStyle(.checkbox)
+                .frame(width: SettingsLayout.shortcutToggleWidth, alignment: .leading)
+                Spacer(minLength: 8)
+                HotKeyRecorderView(
+                    keyCode: Binding(
+                        get: { settings.globalHotKeyKeyCode },
+                        set: { settings.globalHotKeyKeyCode = $0 }
+                    ),
+                    modifiers: Binding(
+                        get: { settings.globalHotKeyModifiers },
+                        set: { settings.globalHotKeyModifiers = $0 }
+                    ),
+                    isRecording: $isRecordingHotKey
+                )
+                .frame(width: SettingsLayout.shortcutRecorderWidth, height: 30)
+            }
+
+            Text(settings.globalHotKeyStatus ?? "在任意应用中按 \(settings.globalHotKeyDisplayName) 显示并聚焦输入框。重复按下不会清空草稿。")
+                .font(.caption)
+                .foregroundStyle(settings.globalHotKeyStatus == nil ? Color.secondary : Color.orange)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("功能快捷键")
+                    .font(.headline.weight(.semibold))
+                Text("下面的快捷键对应 MoodBall 菜单中的功能；可以单独修改或关闭。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(spacing: 0) {
+                ForEach(MoodBallShortcutAction.allCases) { action in
+                    ShortcutEditorRow(action: action, settings: settings)
+                    Divider()
+                        .opacity(0.45)
+                }
+            }
+
+            Button("恢复默认快捷键") {
+                settings.resetShortcuts()
+            }
+            .controlSize(.small)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("使用方式")
+                    .font(.headline.weight(.semibold))
+                Label("按下快捷键：显示并聚焦输入框", systemImage: "keyboard")
+                Label("输入框已打开时重复按下：保留当前草稿", systemImage: "arrow.clockwise")
+                Label("按 Esc：收起输入框，不清空草稿", systemImage: "escape")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 8)
+    }
+}
+
+private struct ShortcutEditorRow: View {
+    let action: MoodBallShortcutAction
+    @ObservedObject var settings: SettingsStore
+    @State private var isRecording = false
+
+    private var configuration: GlobalHotKeyConfiguration {
+        settings.shortcutConfiguration(for: action)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .center, spacing: 12) {
+                Text(action.label)
+                    .frame(width: SettingsLayout.shortcutLabelWidth, alignment: .leading)
+                    .lineLimit(1)
+                Toggle("启用", isOn: Binding(
+                    get: { configuration.isEnabled },
+                    set: { settings.setShortcutEnabled($0, for: action) }
+                ))
+                .toggleStyle(.checkbox)
+                .frame(width: SettingsLayout.shortcutToggleWidth, alignment: .leading)
+                Spacer(minLength: 8)
+                HotKeyRecorderView(
+                    keyCode: Binding(
+                        get: { configuration.keyCode },
+                        set: { settings.setShortcutKeyCode($0, for: action) }
+                    ),
+                    modifiers: Binding(
+                        get: { configuration.modifiers.rawValue },
+                        set: { settings.setShortcutModifiers($0, for: action) }
+                    ),
+                    isRecording: $isRecording
+                )
+                .frame(width: SettingsLayout.shortcutRecorderWidth, height: 30)
+            }
+
+            if let conflict = settings.shortcutConflict(for: action) {
+                Text(conflict)
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if configuration.isEnabled && configuration.menuKeyEquivalent == nil {
+                Text("此按键暂不支持菜单绑定")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 5)
     }
 }
 

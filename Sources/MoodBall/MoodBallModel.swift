@@ -47,6 +47,7 @@ final class MoodBallModel: ObservableObject {
     @Published private(set) var connectionState: ConnectionState = .unreachable
     @Published private(set) var transportKind: TransportKind = .disconnected
     @Published private(set) var composerPhase: MoodBallComposerPhase = .resting
+    @Published private(set) var composerFocusRequest = 0
 
     let commandClient = MoodBallCommandClient()
 
@@ -139,8 +140,9 @@ final class MoodBallModel: ObservableObject {
         composerPhase = hovering ? .hovering : .resting
     }
 
-    func openComposer() {
+    func openComposer(focus: Bool = false) {
         composerPhase = .expanded
+        if focus { composerFocusRequest &+= 1 }
         commandClient.refreshWorkspaces()
     }
 

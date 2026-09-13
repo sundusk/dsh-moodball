@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import SwiftUI
 
 // MARK: - 状态颜色契约
@@ -34,6 +35,67 @@ enum FloatingPetSkin: String, CaseIterable, Identifiable {
         switch self {
         case .moodBall: return "心情球"
         case .xiaoyu: return "小雨"
+        }
+    }
+}
+
+enum FloatingDisplayMode: String, CaseIterable, Identifiable {
+    case petAndControls
+    case controlsOnly
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .petAndControls: return "宠物＋控件"
+        case .controlsOnly: return "仅控件（Mini）"
+        }
+    }
+}
+
+enum MoodBallShortcutAction: String, CaseIterable, Identifiable, Hashable {
+    case inputMessage
+    case newSession
+    case selectWorkspace
+    case openHarness
+    case toggleBallVisibility
+    case togglePetVisibility
+    case openSettings
+    case statePreview
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .inputMessage: return "输入消息"
+        case .newSession: return "新建会话"
+        case .selectWorkspace: return "选择工作区"
+        case .openHarness: return "打开 Harness"
+        case .toggleBallVisibility: return "显示 / 隐藏全部"
+        case .togglePetVisibility: return "显示 / 隐藏桌宠"
+        case .openSettings: return "打开设置"
+        case .statePreview: return "状态展示"
+        }
+    }
+
+    var defaultConfiguration: GlobalHotKeyConfiguration {
+        switch self {
+        case .inputMessage:
+            return GlobalHotKeyConfiguration(isEnabled: true, keyCode: 45, modifiers: [.command]) // ⌘N
+        case .newSession:
+            return GlobalHotKeyConfiguration(isEnabled: true, keyCode: 45, modifiers: [.command, .shift]) // ⌘⇧N
+        case .selectWorkspace:
+            return GlobalHotKeyConfiguration(isEnabled: true, keyCode: 31, modifiers: [.command]) // ⌘O
+        case .openHarness:
+            return GlobalHotKeyConfiguration(isEnabled: true, keyCode: 31, modifiers: [.command, .shift]) // ⌘⇧O
+        case .toggleBallVisibility:
+            return GlobalHotKeyConfiguration(isEnabled: true, keyCode: 9, modifiers: [.command, .shift]) // ⌘⇧V
+        case .togglePetVisibility:
+            return GlobalHotKeyConfiguration(isEnabled: true, keyCode: 35, modifiers: [.command, .shift]) // ⌘⇧P
+        case .openSettings:
+            return GlobalHotKeyConfiguration(isEnabled: true, keyCode: 43, modifiers: [.command]) // ⌘,
+        case .statePreview:
+            return GlobalHotKeyConfiguration(isEnabled: true, keyCode: 2, modifiers: [.command]) // ⌘D
         }
     }
 }
@@ -95,6 +157,7 @@ final class PetSettings: ObservableObject {
 
     private enum Key {
         static let skin = "moodball.skin"
+        static let displayMode = "moodball.displayMode"
         static let ballSize = "moodball.ballSize"
         static let breathingSpeed = "moodball.breathingSpeed"
         static let apiBase = "moodball.apiBase"
@@ -110,6 +173,12 @@ final class PetSettings: ObservableObject {
         static let isBallVisible = "moodball.isBallVisible"
         static let positionX = "moodball.ballPositionX"
         static let positionY = "moodball.ballPositionY"
+        static let miniPositionX = "moodball.miniPositionX"
+        static let miniPositionY = "moodball.miniPositionY"
+        static let globalHotKeyEnabled = "moodball.globalHotKeyEnabled"
+        static let globalHotKeyKeyCode = "moodball.globalHotKeyKeyCode"
+        static let globalHotKeyModifiers = "moodball.globalHotKeyModifiers"
+        static let shortcutPrefix = "moodball.shortcut."
         static let moodColorPrefix = "moodball.moodColor."
     }
 
@@ -133,6 +202,10 @@ final class PetSettings: ObservableObject {
 
     @Published var skin: FloatingPetSkin {
         didSet { defaults.set(skin.rawValue, forKey: Key.skin) }
+    }
+
+    @Published var displayMode: FloatingDisplayMode {
+        didSet { defaults.set(displayMode.rawValue, forKey: Key.displayMode) }
     }
 
     @Published var ballSize: CGFloat {
@@ -187,6 +260,23 @@ final class PetSettings: ObservableObject {
         didSet { defaults.set(rememberPosition, forKey: Key.rememberPosition) }
     }
 
+    @Published var globalHotKeyEnabled: Bool {
+        didSet { defaults.set(globalHotKeyEnabled, forKey: Key.globalHotKeyEnabled) }
+    }
+
+    @Published var globalHotKeyKeyCode: UInt32 {
+        didSet { defaults.set(Int(globalHotKeyKeyCode), forKey: Key.globalHotKeyKeyCode) }
+    }
+
+    @Published var globalHotKeyModifiers: UInt {
+        didSet { defaults.set(Int(globalHotKeyModifiers), forKey: Key.globalHotKeyModifiers) }
+    }
+
+    @Published private(set) var shortcuts: [MoodBallShortcutAction: GlobalHotKeyConfiguration]
+
+    /// Runtime-only feedback from the global shortcut registrar.
+    @Published private(set) var globalHotKeyStatus: String?
+
     @Published private(set) var moodColors: [String: Color] = [:]
 
     @Published var disconnectedColor: Color {
@@ -210,11 +300,94 @@ final class PetSettings: ObservableObject {
         }
     }
 
+    var savedMiniPosition: CGPoint? {
+        get {
+            guard let x = Self.number(defaults, for: Key.miniPositionX, legacy: Key.miniPositionX),
+                  let y = Self.number(defaults, for: Key.miniPositionY, legacy: Key.miniPositionY) else { return nil }
+            return CGPoint(x: x, y: y)
+        }
+        set {
+            if let newValue {
+                defaults.set(Double(newValue.x), forKey: Key.miniPositionX)
+                defaults.set(Double(newValue.y), forKey: Key.miniPositionY)
+            } else {
+                defaults.removeObject(forKey: Key.miniPositionX)
+                defaults.removeObject(forKey: Key.miniPositionY)
+            }
+        }
+    }
+
+    var globalHotKeyConfiguration: GlobalHotKeyConfiguration {
+        GlobalHotKeyConfiguration(
+            isEnabled: globalHotKeyEnabled,
+            keyCode: globalHotKeyKeyCode,
+            modifiers: NSEvent.ModifierFlags(rawValue: globalHotKeyModifiers)
+        )
+    }
+
+    var globalHotKeyDisplayName: String {
+        globalHotKeyConfiguration.displayName
+    }
+
+    func setGlobalHotKeyStatus(_ message: String?) {
+        globalHotKeyStatus = message
+    }
+
+    func shortcutConfiguration(for action: MoodBallShortcutAction) -> GlobalHotKeyConfiguration {
+        shortcuts[action] ?? action.defaultConfiguration
+    }
+
+    func setShortcutEnabled(_ enabled: Bool, for action: MoodBallShortcutAction) {
+        var configuration = shortcutConfiguration(for: action)
+        configuration.isEnabled = enabled
+        setShortcutConfiguration(configuration, for: action)
+    }
+
+    func setShortcutKeyCode(_ keyCode: UInt32, for action: MoodBallShortcutAction) {
+        var configuration = shortcutConfiguration(for: action)
+        configuration.keyCode = keyCode
+        setShortcutConfiguration(configuration, for: action)
+    }
+
+    func setShortcutModifiers(_ modifiers: UInt, for action: MoodBallShortcutAction) {
+        var configuration = shortcutConfiguration(for: action)
+        configuration.modifiers = NSEvent.ModifierFlags(rawValue: modifiers)
+        setShortcutConfiguration(configuration, for: action)
+    }
+
+    func resetShortcuts() {
+        for action in MoodBallShortcutAction.allCases {
+            setShortcutConfiguration(action.defaultConfiguration, for: action)
+        }
+    }
+
+    func shortcutConflict(for action: MoodBallShortcutAction) -> String? {
+        let configuration = shortcutConfiguration(for: action)
+        guard configuration.isEnabled else { return nil }
+        let conflicts = MoodBallShortcutAction.allCases.filter { other in
+            other != action
+                && shortcutConfiguration(for: other).isEnabled
+                && shortcutConfiguration(for: other).keyCode == configuration.keyCode
+                && shortcutConfiguration(for: other).modifiers == configuration.modifiers
+        }
+        guard !conflicts.isEmpty else { return nil }
+        return "与 \(conflicts.map(\.label).joined(separator: "、")) 冲突，请换一个组合键"
+    }
+
+    private func setShortcutConfiguration(_ configuration: GlobalHotKeyConfiguration, for action: MoodBallShortcutAction) {
+        shortcuts[action] = configuration
+        let prefix = Key.shortcutPrefix + action.rawValue
+        defaults.set(configuration.isEnabled, forKey: prefix + ".enabled")
+        defaults.set(Int(configuration.keyCode), forKey: prefix + ".keyCode")
+        defaults.set(Int(configuration.modifiers.rawValue), forKey: prefix + ".modifiers")
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         let clamp = { (value: Double, lower: Double, upper: Double) in min(max(value, lower), upper) }
 
         skin = FloatingPetSkin(rawValue: defaults.string(forKey: Key.skin) ?? "") ?? .xiaoyu
+        displayMode = FloatingDisplayMode(rawValue: defaults.string(forKey: Key.displayMode) ?? "") ?? .petAndControls
         ballSize = CGFloat(clamp(Self.number(defaults, for: Key.ballSize, legacy: LegacyKey.ballSize) ?? 120, 60, 200))
         breathingSpeed = clamp(Self.number(defaults, for: Key.breathingSpeed, legacy: LegacyKey.breathingSpeed) ?? 2, 0.5, 5)
         apiBase = Self.string(defaults, for: Key.apiBase, legacy: LegacyKey.apiBase) ?? "http://127.0.0.1:3080"
@@ -222,6 +395,34 @@ final class PetSettings: ObservableObject {
         requestTimeout = clamp(Self.number(defaults, for: Key.requestTimeout, legacy: LegacyKey.requestTimeout) ?? 2, 0.5, 5)
         clickThroughMode = ClickThroughMode(rawValue: Self.string(defaults, for: Key.clickThrough, legacy: LegacyKey.clickThrough) ?? "") ?? .hover
         rememberPosition = Self.bool(defaults, for: Key.rememberPosition, legacy: LegacyKey.rememberPosition) ?? true
+        globalHotKeyEnabled = defaults.object(forKey: Key.globalHotKeyEnabled) == nil
+            ? GlobalHotKeyConfiguration.default.isEnabled
+            : defaults.bool(forKey: Key.globalHotKeyEnabled)
+        globalHotKeyKeyCode = UInt32(Self.number(defaults, for: Key.globalHotKeyKeyCode, legacy: Key.globalHotKeyKeyCode)
+            ?? Double(GlobalHotKeyConfiguration.default.keyCode))
+        globalHotKeyModifiers = UInt(Self.number(defaults, for: Key.globalHotKeyModifiers, legacy: Key.globalHotKeyModifiers)
+            ?? Double(GlobalHotKeyConfiguration.default.modifiers.rawValue))
+        globalHotKeyStatus = nil
+
+        var loadedShortcuts: [MoodBallShortcutAction: GlobalHotKeyConfiguration] = [:]
+        for action in MoodBallShortcutAction.allCases {
+            let prefix = Key.shortcutPrefix + action.rawValue
+            let defaultValue = action.defaultConfiguration
+            loadedShortcuts[action] = GlobalHotKeyConfiguration(
+                isEnabled: defaults.object(forKey: prefix + ".enabled") == nil
+                    ? defaultValue.isEnabled
+                    : defaults.bool(forKey: prefix + ".enabled"),
+                keyCode: UInt32(Self.number(defaults, for: prefix + ".keyCode", legacy: prefix + ".keyCode")
+                    ?? Double(defaultValue.keyCode)),
+                modifiers: NSEvent.ModifierFlags(rawValue: UInt(Self.number(
+                    defaults,
+                    for: prefix + ".modifiers",
+                    legacy: prefix + ".modifiers"
+                ) ?? Double(defaultValue.modifiers.rawValue)))
+            )
+        }
+        shortcuts = loadedShortcuts
+
         showEyes = Self.bool(defaults, for: Key.showEyes, legacy: LegacyKey.showEyes) ?? true
         eyeColor = EyeColor(rawValue: Self.string(defaults, for: Key.eyeColor, legacy: LegacyKey.eyeColor) ?? "") ?? .black
         showStatusBubble = Self.bool(defaults, for: Key.showStatusBubble, legacy: LegacyKey.showStatusBubble) ?? true
