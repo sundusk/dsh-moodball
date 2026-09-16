@@ -79,8 +79,9 @@ struct MoodBallComposerView: View {
                                 taskCard(task)
                             }
                         }
+                        .background(HiddenVerticalScroller())
                     }
-                    .scrollIndicators(.automatic)
+                    .scrollIndicators(.hidden)
                     .frame(maxHeight: Self.taskCardHeight * 4 + 21)
                 } else if let task = orderedTasks.first {
                     ZStack {
@@ -102,7 +103,7 @@ struct MoodBallComposerView: View {
         }
         .padding(.horizontal, hasTaskCards ? 4 : 0)
         .padding(.vertical, 4)
-        .frame(width: taskSurfaceWidth, height: taskSurfaceHeight)
+        .frame(width: taskSurfaceWidth, height: taskSurfaceHeight, alignment: .top)
     }
 
     private func taskActionBar(isMini: Bool) -> some View {
@@ -140,17 +141,10 @@ struct MoodBallComposerView: View {
                         model.clearFocusedTask()
                     }
                 } label: {
-                    HStack(spacing: 3) {
-                        Image(systemName: command.unreadTaskCount > 0 ? "bell.badge.fill" : "checklist")
-                            .font(.system(size: 12, weight: .semibold))
-                        if command.unreadTaskCount > 0 || command.currentWorkspaceTasks.count > 1 {
-                            let count = command.unreadTaskCount > 0 ? command.unreadTaskCount : command.currentWorkspaceTasks.count
-                            Text(count > 99 ? "99+" : "\(count)")
-                                .font(.system(size: 10, weight: .bold, design: .rounded))
-                        }
-                    }
-                    .foregroundStyle(command.unreadTaskCount > 0 ? Color.orange : .primary.opacity(0.72))
-                    .frame(width: 32, height: 26)
+                    Image(systemName: command.unreadTaskCount > 0 ? "bell.badge.fill" : "checklist")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(command.unreadTaskCount > 0 ? Color.orange : .primary.opacity(0.72))
+                        .frame(width: 32, height: 26)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("任务提醒，\(command.currentWorkspaceTasks.count)项")
@@ -552,6 +546,47 @@ struct MoodBallComposerView: View {
         .scrollIndicators(.automatic)
         .frame(height: 60)
         .accessibilityLabel("待发送图片，\(command.draftImages.count) 张")
+    }
+}
+
+/// SwiftUI's scroll-indicator visibility can still inherit macOS's “Always”
+/// scrollbar preference inside a transparent panel. Disable only the backing
+/// AppKit scroller; wheel and trackpad scrolling continue to work normally.
+private struct HiddenVerticalScroller: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        HiddenVerticalScrollerView(frame: .zero)
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        (view as? HiddenVerticalScrollerView)?.hideEnclosingScroller()
+    }
+}
+
+private final class HiddenVerticalScrollerView: NSView {
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        hideEnclosingScroller()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        hideEnclosingScroller()
+    }
+
+    override func layout() {
+        super.layout()
+        hideEnclosingScroller()
+    }
+
+    func hideEnclosingScroller() {
+        guard let scrollView = enclosingScrollView else { return }
+        if scrollView.hasVerticalScroller {
+            scrollView.hasVerticalScroller = false
+        }
+        if !scrollView.autohidesScrollers {
+            scrollView.autohidesScrollers = true
+        }
+        scrollView.verticalScroller?.isHidden = true
     }
 }
 

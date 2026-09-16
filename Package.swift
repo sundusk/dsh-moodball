@@ -10,6 +10,11 @@ let package = Package(
         .executableTarget(
             name: "MoodBall",
             path: "Sources/MoodBall"
-        )
+        ),
+        .testTarget(
+            name: "MoodBallTests",
+            dependencies: ["MoodBall"],
+            path: "tests/MoodBallTests"
+        ),
     ]
 )

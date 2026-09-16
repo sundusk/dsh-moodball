@@ -371,7 +371,10 @@ final class MoodBallCommandClient: ObservableObject {
 
         sessionID = task.sessionID
         defaults.set(task.sessionID, forKey: Keys.sessionID)
-        sessionSnapshot = task.snapshot
+        // Task summaries retain terminal results for card history. The pet must
+        // wait for the live Session subscription instead of animating that
+        // historical result indefinitely.
+        sessionSnapshot = nil
         subscribe(to: task.sessionID)
         return true
     }
@@ -657,6 +660,7 @@ final class MoodBallCommandClient: ObservableObject {
                 imageAttachmentsAvailable = supports.contains("imageAttachments")
                 imageLimits = decodeImageLimits(response["attachmentLimits"])
                 if taskListAvailable { subscribeTasks() } else { tasks = [] }
+                if let sessionID { subscribe(to: sessionID) }
                 refreshWorkspaces()
             } catch {
                 capabilitiesAvailable = false
@@ -866,11 +870,14 @@ final class MoodBallCommandClient: ObservableObject {
             hasReceivedTaskBaseline = true
             persistReadMarkers()
         }
+        applyTaskSummaries(decoded)
+    }
+
+    /// Task-card history and the pet's live animation are separate state
+    /// channels. In particular, a retained done/failed card must never replace
+    /// the live Session snapshot merely because the card list refreshed.
+    func applyTaskSummaries(_ decoded: [MoodBallTaskSummary]) {
         tasks = decoded
-        if let sessionID,
-           let target = decoded.first(where: { $0.id == sessionID }) {
-            sessionSnapshot = target.snapshot
-        }
     }
 
     func isTaskUnread(_ task: MoodBallTaskSummary) -> Bool {

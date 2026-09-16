@@ -155,6 +155,7 @@ final class MoodBallModel: ObservableObject {
 
     func toggleTaskList() {
         guard commandClient.currentWorkspaceTasks.count > 1 else { return }
+        commandClient.clearFocusedTask()
         taskListExpanded.toggle()
     }
 
