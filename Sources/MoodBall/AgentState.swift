@@ -130,3 +130,67 @@ struct MoodBridgeSnapshot: Codable, Equatable {
         )
     }
 }
+
+/// One ordinary Harness Session displayed by the MoodBall task center.
+/// Status is projected by the plugin; read state remains local to the App.
+struct MoodBallTaskSummary: Codable, Equatable, Identifiable {
+    let sessionID: String
+    let workspaceID: String
+    let title: String
+    let cwd: String?
+    let updatedAt: TimeInterval
+    let running: Bool
+    let blank: Bool
+    let state: AgentState
+    let mood: String
+    let taskRunning: Bool
+    let waitingForUser: Bool
+    let failed: Bool
+    let completed: Bool
+    let tool: String?
+    let message: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case sessionID = "sessionId"
+        case workspaceID = "workspaceId"
+        case title, cwd, updatedAt, running, blank, state, mood
+        case taskRunning, waitingForUser, failed, completed, tool, message
+    }
+
+    var id: String { sessionID }
+
+    var statusLabel: String {
+        if waitingForUser { return mood == "authorizing" ? "等待授权" : "等待操作" }
+        if failed { return "失败" }
+        if completed { return "已完成" }
+        if taskRunning || running { return "执行中" }
+        if state == .stopped { return "已停止" }
+        if blank { return "新会话" }
+        return "就绪"
+    }
+
+    var statusIcon: String {
+        if waitingForUser { return "hand.raised.fill" }
+        if failed { return "exclamationmark.circle.fill" }
+        if completed { return "checkmark.circle.fill" }
+        if taskRunning || running { return "progress.indicator" }
+        if state == .stopped { return "stop.circle.fill" }
+        return "circle"
+    }
+
+    var snapshot: MoodBridgeSnapshot {
+        MoodBridgeSnapshot(
+            state: state,
+            mood: mood,
+            sessionId: sessionID,
+            workspaceId: workspaceID,
+            taskRunning: taskRunning,
+            waitingForUser: waitingForUser,
+            failed: failed,
+            completed: completed,
+            tool: tool,
+            message: message,
+            updatedAt: updatedAt
+        )
+    }
+}

@@ -10,11 +10,17 @@
 import { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
-import type {} from '@deepseek-ai/dsh-api-session-controller'
+import type { PromptContentPart } from '@deepseek-ai/dsh-api-session-controller'
 import type {} from '@deepseek-ai/dsh-workspace'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { CommandBridge, type MoodballWorkspace } from './CommandBridge.js'
+import { basename } from 'node:path'
+import {
+  CommandBridge,
+  type ImageAttachmentLimits,
+  type MoodballTask,
+  type MoodballWorkspace,
+} from './CommandBridge.js'
 import { LocalStateBridge, type MoodBridgePayload } from './LocalStateBridge.js'
 
 export { CommandBridge } from './CommandBridge.js'
@@ -23,7 +29,7 @@ export { CommandBridge } from './CommandBridge.js'
 export const name = 'moodball'
 
 /** Services required before the status surface can mount. */
-export const inject = ['webServer', 'workspaceRegistry', 'sessionController']
+export const inject = ['webServer', 'workspaceRegistry', 'sessionController', 'attachments']
 
 /** The mood the desktop app renders (same vocabulary as the web water ball). */
 export type MoodballMood =
@@ -37,7 +43,9 @@ export type MoodballMood =
   | 'authorizing'
   | 'questioning'
 
-function stateForMood(mood: MoodballMood): string {
+type MoodballResult = Extract<MoodballMood, 'done' | 'failed' | 'stopped'>
+
+function stateForMood(mood: MoodballMood): MoodballTask['state'] {
   switch (mood) {
     case 'waiting': return 'thinking'
     case 'jumping': return 'toolCalling'
@@ -49,6 +57,10 @@ function stateForMood(mood: MoodballMood): string {
     case 'idle': return 'idle'
     default: return 'disconnected'
   }
+}
+
+function isRunningMood(mood: MoodballMood): boolean {
+  return ['waiting', 'jumping', 'authorizing', 'questioning'].includes(mood)
 }
 
 /** Write one JSON response. */
@@ -71,6 +83,8 @@ export function apply(ctx: Context): void {
     mood: MoodballMood
     holdUntil: number
     questionActive: boolean
+    /** Last terminal result stays on the task card until its next turn. */
+    lastResult?: MoodballResult
     tool?: string
     message?: string
   }
@@ -82,6 +96,9 @@ export function apply(ctx: Context): void {
   }
   const sessionStates = new Map<string, SessionMoodState>()
   const sessionOperations = new Map<string, Promise<void>>()
+  let taskSnapshot: MoodballTask[] = []
+  let taskRefreshTimer: ReturnType<typeof setTimeout> | undefined
+  let refreshTaskSnapshot: (() => Promise<readonly MoodballTask[]>) | undefined
   let activeSessionId: string | undefined
   let commandBridge: CommandBridge | undefined
 
@@ -133,9 +150,83 @@ export function apply(ctx: Context): void {
 
   const localBridge = new LocalStateBridge(snapshot)
 
+  const workspaceForSummary = (sessionId: string) => ctx.workspaceRegistry.list().find(workspace =>
+    workspace.sessionIds.some(candidate => String(candidate) === sessionId),
+  )
+
+  const titleForSummary = (summary: { sessionId: string; cwd?: string }, workspace: { title: string }): string => {
+    const serviceContext = ctx as unknown as {
+      get?: (name: string, strict?: boolean) => unknown
+    }
+    const sessions = serviceContext.get?.('sessions', false) as { get(id: string): Session | undefined } | undefined
+    const titleService = serviceContext.get?.('sessionTitle', false) as {
+      get(session: Session): { title?: string } | undefined
+    } | undefined
+    const liveSession = sessions?.get(summary.sessionId)
+    const title = liveSession === undefined ? undefined : titleService?.get(liveSession)?.title
+    if (title !== undefined && title.trim() !== '') return title
+
+    const directory = summary.cwd === undefined ? '' : basename(summary.cwd)
+    const suffix = summary.sessionId.slice(-8)
+    return directory !== '' && directory !== workspace.title
+      ? `${directory} · 会话 ${suffix}`
+      : `会话 ${suffix}`
+  }
+
+  const tasksFromSummaries = (summaries: readonly {
+    sessionId: string
+    updatedAt: number
+    running: boolean
+    blank: boolean
+    parentSessionId?: string
+    origin?: 'subagent'
+    cwd?: string
+  }[]): MoodballTask[] => summaries.flatMap(summary => {
+    // The task center is for ordinary user sessions only. Child Agent rows
+    // remain visible inside Harness and must not compete with their parent.
+    if (summary.parentSessionId !== undefined || summary.origin === 'subagent') return []
+    const workspace = workspaceForSummary(summary.sessionId)
+    if (workspace === undefined) return []
+
+    const state = stateFor(summary.sessionId, String(workspace.id))
+    let mood = state.mood
+    if (summary.running && !isRunningMood(mood)) mood = 'waiting'
+    if (!summary.running && isRunningMood(mood)) mood = 'idle'
+    if (!summary.running && state.lastResult !== undefined) mood = state.lastResult
+    const projected = snapshotOf({ ...state, mood, workspaceId: String(workspace.id) })
+    return [{
+      sessionId: summary.sessionId,
+      workspaceId: String(workspace.id),
+      title: titleForSummary(summary, workspace),
+      ...(summary.cwd === undefined ? {} : { cwd: summary.cwd }),
+      updatedAt: summary.updatedAt,
+      running: summary.running,
+      blank: summary.blank,
+      state: projected.state as MoodballTask['state'],
+      mood: projected.mood,
+      taskRunning: summary.running || projected.taskRunning,
+      waitingForUser: projected.waitingForUser,
+      failed: projected.failed,
+      completed: projected.completed,
+      ...(projected.tool === undefined ? {} : { tool: projected.tool }),
+      ...(projected.message === undefined ? {} : { message: projected.message }),
+    }]
+  })
+
+  const scheduleTaskRefresh = (): void => {
+    if (taskRefreshTimer !== undefined) return
+    taskRefreshTimer = setTimeout(() => {
+      taskRefreshTimer = undefined
+      void refreshTaskSnapshot?.().catch(error => {
+        console.warn(`[moodball] task list refresh failed: ${String(error)}`)
+      })
+    }, 150)
+  }
+
   const publish = (state: SessionMoodState): void => {
     localBridge.publish()
     if (state.sessionId) commandBridge?.publish(state.sessionId, snapshotOf(state))
+    scheduleTaskRefresh()
   }
 
   // A transient mood (done / failed / stopped) holds for `ms` before reverting
@@ -143,6 +234,7 @@ export function apply(ctx: Context): void {
   // the immediately following `activity/status` idle phase.
   const setTransient = (state: SessionMoodState, next: MoodballMood, ms: number): void => {
     state.mood = next
+    if (next === 'done' || next === 'failed' || next === 'stopped') state.lastResult = next
     state.holdUntil = Date.now() + ms
     publish(state)
     setTimeout(() => {
@@ -165,10 +257,12 @@ export function apply(ctx: Context): void {
     if (sessionId) activeSessionId = sessionId
 
     if (event.type === 'turn/start' || event.type === 'step/start' || event.type === 'assistant/chunk') {
+      state.lastResult = undefined
       state.mood = 'waiting'
       state.holdUntil = 0
       state.message = undefined
     } else if (event.type === 'tool/call') {
+      state.lastResult = undefined
       const call = (event.data ?? {}) as { name?: string }
       state.tool = call.name
       if (call.name === 'ask_user_question') {
@@ -193,11 +287,13 @@ export function apply(ctx: Context): void {
         state.holdUntil = 0
       }
     } else if (event.type === 'approval/asked') {
+      state.lastResult = undefined
       state.mood = 'authorizing'
       state.holdUntil = 0
     } else if (event.type === 'approval/decided') {
       const payload = (event.data ?? {}) as { result?: string }
       if (payload.result === 'allowed-once') {
+        state.lastResult = undefined
         state.mood = 'waiting'
         state.holdUntil = 0
       } else if (payload.result === 'rejected' || payload.result === 'cancelled' || payload.result === 'unavailable') {
@@ -209,12 +305,14 @@ export function apply(ctx: Context): void {
       switch (payload.phase) {
         case 'waiting':
         case 'thinking':
+          state.lastResult = undefined
           state.mood = 'waiting'
           state.holdUntil = 0
           state.message = undefined
           break
         case 'tool':
           if (state.questionActive) return
+          state.lastResult = undefined
           state.mood = 'jumping'
           state.holdUntil = 0
           break
@@ -241,6 +339,12 @@ export function apply(ctx: Context): void {
     publish(state)
   })
 
+  ctx.on('session/created', () => { scheduleTaskRefresh() })
+  ctx.on('session/disposed', session => {
+    sessionStates.delete(String(session.id))
+    scheduleTaskRefresh()
+  })
+
   const serializeSession = <T>(sessionId: string, operation: () => Promise<T>): Promise<T> => {
     const previous = sessionOperations.get(sessionId) ?? Promise.resolve()
     const result = previous.then(operation)
@@ -253,6 +357,9 @@ export function apply(ctx: Context): void {
   }
 
   commandBridge = new CommandBridge({
+    imageAttachmentLimits: (ctx as unknown as {
+      attachments: { imageLimits: ImageAttachmentLimits }
+    }).attachments.imageLimits,
     listWorkspaces: async (): Promise<readonly MoodballWorkspace[]> => Promise.all(
       ctx.workspaceRegistry.list().map(async workspace => ({
         id: String(workspace.id),
@@ -262,6 +369,10 @@ export function apply(ctx: Context): void {
         sessionIds: workspace.sessionIds.map(String),
       })),
     ),
+    listTasks: async (): Promise<readonly MoodballTask[]> => {
+      if (refreshTaskSnapshot !== undefined) return refreshTaskSnapshot()
+      return taskSnapshot
+    },
     createSession: request => serializeSession(request.sessionId, async () => {
       const workspace = ctx.workspaceRegistry.get(request.workspaceId as never)
       if (workspace === undefined) throw new Error(`workspace "${request.workspaceId}" not found`)
@@ -278,21 +389,37 @@ export function apply(ctx: Context): void {
       if (!workspace.sessionIds.some(candidate => String(candidate) === request.sessionId)) {
         throw new Error(`session "${request.sessionId}" is not attached to workspace "${request.workspaceId}"`)
       }
+      const content: PromptContentPart[] = [
+        ...(request.text.trim() === '' ? [] : [{ type: 'text' as const, text: request.text }]),
+        ...request.images.map(image => ({ type: 'image' as const, ...image })),
+      ]
       await ctx.sessionController.prompt({
         requestId: request.requestId as never,
         sessionId: request.sessionId as never,
         mode: 'queue',
-        content: [{ type: 'text', text: request.text }],
+        content,
       }, AbortSignal.timeout(30_000))
       return { accepted: true, sessionId: request.sessionId }
     }),
     snapshotFor: snapshotForSession,
   })
 
+  refreshTaskSnapshot = async (): Promise<readonly MoodballTask[]> => {
+    const listed = await ctx.sessionController.list({}, AbortSignal.timeout(15_000))
+    taskSnapshot = tasksFromSummaries(listed.items)
+    commandBridge?.publishTasks(taskSnapshot)
+    return taskSnapshot
+  }
+
   ctx.effect(() => {
     localBridge.start()
     commandBridge?.start()
+    void refreshTaskSnapshot?.().catch(error => {
+      console.warn(`[moodball] initial task list unavailable: ${String(error)}`)
+    })
     return () => {
+      if (taskRefreshTimer !== undefined) clearTimeout(taskRefreshTimer)
+      taskRefreshTimer = undefined
       commandBridge?.stop()
       localBridge.stop()
     }

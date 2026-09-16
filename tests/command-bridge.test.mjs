@@ -67,8 +67,23 @@ test('command bridge serves capabilities, subscription snapshots, and serialized
   let maxActive = 0
   const prompts = []
   const bridge = new CommandBridge({
+    imageAttachmentLimits: imageLimits(),
     listWorkspaces: async () => [{
       id: 'workspace-test', title: 'Test', path: root, status: 'ok', sessionIds: [],
+    }],
+    listTasks: async () => [{
+      sessionId: snapshot.sessionId,
+      workspaceId: snapshot.workspaceId,
+      title: 'Task',
+      updatedAt: 1,
+      running: true,
+      blank: false,
+      state: 'thinking',
+      mood: 'waiting',
+      taskRunning: true,
+      waitingForUser: false,
+      failed: false,
+      completed: false,
     }],
     createSession: async request => ({ sessionId: request.sessionId }),
     prompt: async request => {
@@ -87,10 +102,21 @@ test('command bridge serves capabilities, subscription snapshots, and serialized
   const nextLine = readLines(socket)
   const capabilities = await send(socket, nextLine, 'cap', 'capabilities')
   assert.equal(capabilities.ok, true)
-  assert.deepEqual(capabilities.supports, ['workspaces', 'createSession', 'prompt', 'subscribe', 'unsubscribe'])
+  assert.deepEqual(capabilities.supports, [
+    'workspaces', 'tasks', 'subscribeTasks', 'unsubscribeTasks',
+    'createSession', 'prompt', 'imageAttachments', 'subscribe', 'unsubscribe',
+  ])
+  assert.deepEqual(capabilities.attachmentLimits, imageLimits())
+  assert.ok(capabilities.maxCommandBytes > imageLimits().maxMessageImageBytes)
 
   const listed = await send(socket, nextLine, 'list', 'workspaces')
   assert.equal(listed.workspaces[0].title, 'Test')
+
+  const tasks = await send(socket, nextLine, 'tasks', 'tasks')
+  assert.equal(tasks.tasks[0].title, 'Task')
+
+  const subscribedTasks = await send(socket, nextLine, 'tasks-sub', 'subscribeTasks')
+  assert.equal(subscribedTasks.tasks[0].sessionId, snapshot.sessionId)
 
   const subscribed = await send(socket, nextLine, 'sub', 'subscribe', { sessionId: snapshot.sessionId })
   assert.deepEqual(subscribed.snapshot, snapshot)
@@ -106,10 +132,27 @@ test('command bridge serves capabilities, subscription snapshots, and serialized
   assert.equal(maxActive, 1)
   assert.deepEqual(prompts.map(prompt => prompt.requestId), ['request-a', 'request-b'])
 
+  const imageOnly = await send(socket, nextLine, 'prompt-image', 'prompt', {
+    workspaceId: snapshot.workspaceId,
+    sessionId: snapshot.sessionId,
+    requestId: 'request-image',
+    text: '',
+    images: [{ mediaType: 'image/png', data: 'aGVsbG8=', name: 'capture.png' }],
+  })
+  assert.equal(imageOnly.accepted, true)
+  assert.deepEqual(prompts.at(-1).images, [
+    { mediaType: 'image/png', data: 'aGVsbG8=', name: 'capture.png' },
+  ])
+
   bridge.publish(snapshot.sessionId, { ...snapshot, mood: 'done', state: 'completed', taskRunning: false })
   const event = await nextLine()
   assert.equal(event.event, 'status')
   assert.equal(event.snapshot.mood, 'done')
+
+  bridge.publishTasks(subscribedTasks.tasks)
+  const taskEvent = await nextLine()
+  assert.equal(taskEvent.event, 'tasks')
+  assert.equal(taskEvent.tasks[0].title, 'Task')
 
   const permissions = (await stat(socketPath)).mode & 0o777
   assert.equal(permissions, 0o600)
@@ -123,7 +166,9 @@ test('command bridge rejects malformed JSON without taking down the socket', asy
   const root = await mkdtemp(join(tmpdir(), 'moodball-command-invalid-'))
   const socketPath = join(root, 'command.sock')
   const bridge = new CommandBridge({
+    imageAttachmentLimits: imageLimits(),
     listWorkspaces: async () => [],
+    listTasks: async () => [],
     createSession: async request => ({ sessionId: request.sessionId }),
     prompt: async request => ({ accepted: true, sessionId: request.sessionId }),
     snapshotFor: () => undefined,
@@ -141,3 +186,97 @@ test('command bridge rejects malformed JSON without taking down the socket', asy
   bridge.stop()
   await rm(root, { recursive: true, force: true })
 })
+
+test('command bridge enforces deployment image limits and remains usable after oversized input', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'moodball-command-images-'))
+  const socketPath = join(root, 'command.sock')
+  const bridge = new CommandBridge({
+    imageAttachmentLimits: imageLimits({ maxImageBytes: 4, maxImagesPerMessage: 2, maxMessageImageBytes: 3 }),
+    listWorkspaces: async () => [],
+    listTasks: async () => [],
+    createSession: async request => ({ sessionId: request.sessionId }),
+    prompt: async request => {
+      if (request.requestId === 'server-error') {
+        const error = new Error('Model does not support image input.')
+        error.code = 'session/attachment-invalid'
+        throw error
+      }
+      return { accepted: true, sessionId: request.sessionId }
+    },
+    snapshotFor: () => undefined,
+  }, socketPath)
+  bridge.start()
+  const socket = await waitForServer(socketPath)
+  const nextLine = readLines(socket)
+  const fields = {
+    workspaceId: 'workspace-test', sessionId: 'session-test', requestId: 'request-test', text: '',
+  }
+
+  const tooMany = await send(socket, nextLine, 'many', 'prompt', {
+    ...fields,
+    images: [
+      { mediaType: 'image/png', data: 'YQ==' },
+      { mediaType: 'image/png', data: 'Yg==' },
+      { mediaType: 'image/png', data: 'Yw==' },
+    ],
+  })
+  assert.equal(tooMany.error.code, 'session/attachment-invalid')
+  assert.match(tooMany.error.message, /image-count limit/)
+
+  const tooLarge = await send(socket, nextLine, 'large', 'prompt', {
+    ...fields,
+    images: [{ mediaType: 'image/png', data: 'YWJjZQ==' }],
+  })
+  assert.equal(tooLarge.error.code, 'session/attachment-invalid')
+  assert.match(tooLarge.error.message, /image-byte limit/)
+
+  const invalidBase64 = await send(socket, nextLine, 'base64', 'prompt', {
+    ...fields,
+    images: [{ mediaType: 'image/png', data: 'not base64' }],
+  })
+  assert.equal(invalidBase64.error.code, 'session/attachment-invalid')
+  assert.match(invalidBase64.error.message, /canonical base64/)
+
+  const aggregateTooLarge = await send(socket, nextLine, 'aggregate', 'prompt', {
+    ...fields,
+    images: [
+      { mediaType: 'image/png', data: 'YWI=' },
+      { mediaType: 'image/png', data: 'Y2Q=' },
+    ],
+  })
+  assert.equal(aggregateTooLarge.error.code, 'session/attachment-invalid')
+  assert.match(aggregateTooLarge.error.message, /aggregate image-byte limit/)
+
+  const serverError = await send(socket, nextLine, 'server', 'prompt', {
+    ...fields,
+    requestId: 'server-error',
+    images: [{ mediaType: 'image/png', data: 'YQ==' }],
+  })
+  assert.equal(serverError.error.code, 'session/attachment-invalid')
+  assert.equal(serverError.error.message, 'Model does not support image input.')
+
+  // Reject before a newline arrives so an attacker cannot grow the buffer
+  // without bound, then resynchronize at the next NDJSON delimiter.
+  socket.write('x'.repeat(1024 * 1024 + 16))
+  const oversized = await nextLine()
+  assert.equal(oversized.error.code, 'request-too-large')
+  socket.write('\n')
+  const capabilities = await send(socket, nextLine, 'cap', 'capabilities')
+  assert.equal(capabilities.ok, true)
+
+  socket.destroy()
+  bridge.stop()
+  await rm(root, { recursive: true, force: true })
+})
+
+function imageLimits(overrides = {}) {
+  return {
+    maxImageBytes: 20,
+    maxImagesPerMessage: 2,
+    maxMessageImageBytes: 30,
+    maxImagePixels: 100,
+    maxImageDimension: 10,
+    mediaTypes: ['image/png', 'image/jpeg'],
+    ...overrides,
+  }
+}

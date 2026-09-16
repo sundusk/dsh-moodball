@@ -48,8 +48,11 @@ final class MoodBallModel: ObservableObject {
     @Published private(set) var transportKind: TransportKind = .disconnected
     @Published private(set) var composerPhase: MoodBallComposerPhase = .resting
     @Published private(set) var composerFocusRequest = 0
+    /// Session-only choice; a new app launch starts folded by design.
+    @Published var taskListExpanded = false
 
     let commandClient = MoodBallCommandClient()
+    var onRegionScreenshotRequested: (() -> Void)?
 
     /// Menu bar status text includes the active transport without exposing its
     /// implementation to the views.
@@ -150,8 +153,34 @@ final class MoodBallModel: ObservableObject {
         composerPhase = .resting
     }
 
+    func toggleTaskList() {
+        guard commandClient.currentWorkspaceTasks.count > 1 else { return }
+        taskListExpanded.toggle()
+    }
+
+    func focusTask(_ id: String) {
+        commandClient.focusTask(id)
+    }
+
+    func clearFocusedTask() {
+        commandClient.clearFocusedTask()
+    }
+
+    @discardableResult
+    func continueTask(_ task: MoodBallTaskSummary) -> Bool {
+        commandClient.continueTask(task)
+    }
+
     func submitDraft() {
         commandClient.submitDraft()
+    }
+
+    func pasteImage() {
+        commandClient.addImageFromPasteboard()
+    }
+
+    func captureRegion() {
+        onRegionScreenshotRequested?()
     }
 
     func startNewSession() {

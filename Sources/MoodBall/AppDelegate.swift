@@ -81,6 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsSink: AnyCancellable?
     private var bubbleSink: AnyCancellable?
     private var composerSink: AnyCancellable?
+    private var taskLayoutSink: AnyCancellable?
     private var commandSink: AnyCancellable?
     private var hotKeySink: AnyCancellable?
     private var resignObserver: NSObjectProtocol?
@@ -92,6 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var shortcutMenuItems: [MoodBallShortcutAction: [NSMenuItem]] = [:]
     private var lastIconColor: Color?
     private let globalHotKeyManager = GlobalHotKeyManager()
+    private var isCapturingRegion = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 单实例守卫：若已有同 Bundle ID 的实例在运行，本实例立即退出。
@@ -111,6 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         setupPanel()
         setupComposerPanel()
+        model.onRegionScreenshotRequested = { [weak self] in self?.captureRegionScreenshot() }
         setupGlobalHotKey()
         model.start()
         startHoverMonitor()
@@ -144,6 +147,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         model.stop()
+        model.onRegionScreenshotRequested = nil
         for monitor in hoverMonitors {
             NSEvent.removeMonitor(monitor)
         }
@@ -154,6 +158,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusSink = nil
         composerSink?.cancel()
         composerSink = nil
+        taskLayoutSink?.cancel()
+        taskLayoutSink = nil
         commandSink?.cancel()
         commandSink = nil
         hotKeySink?.cancel()
@@ -419,6 +425,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { [weak self] _ in
                 self?.updateComposerPanel()
             }
+        taskLayoutSink = model.$taskListExpanded
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.updateComposerPanel()
+            }
         commandSink = model.commandClient.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
@@ -430,7 +441,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self, self.model.composerPhase == .expanded else { return }
+                guard let self, self.model.composerPhase == .expanded, !self.isCapturingRegion else { return }
                 self.model.collapseComposer()
             }
         }
@@ -448,18 +459,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if settings.displayMode == .controlsOnly {
             switch model.composerPhase {
             case .resting, .hovering:
-                size = NSSize(width: 104, height: 34)
+                size = taskSurfaceSize
             case .expanded:
-                size = NSSize(width: 340, height: 132)
+                size = expandedComposerSize
             }
         } else {
             switch model.composerPhase {
             case .resting:
                 size = NSSize(width: 72, height: 18)
             case .hovering:
-                size = NSSize(width: 48, height: 34)
+                size = taskSurfaceSize
             case .expanded:
-                size = NSSize(width: 340, height: 132)
+                size = expandedComposerSize
             }
         }
         if !composerPanel.isMiniDragging {
@@ -474,6 +485,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 && model.composerPhase != .hovering
         }
         composerPanel.orderFrontRegardless()
+    }
+
+    private var taskSurfaceSize: NSSize {
+        let command = model.commandClient
+        let hasCards = command.taskListAvailable && !command.currentWorkspaceTasks.isEmpty
+        guard hasCards else { return NSSize(width: 120, height: 42) }
+        if command.focusedTask != nil { return NSSize(width: 320, height: 166) }
+        let count = model.taskListExpanded ? min(command.sortedTasks.count, 4) : 1
+        let height = 8 + 34 + 7 + CGFloat(count) * 58 + CGFloat(max(0, count - 1)) * 7
+        return NSSize(width: 320, height: height)
+    }
+
+    private var expandedComposerSize: NSSize {
+        NSSize(
+            width: 340,
+            height: model.commandClient.draftImages.isEmpty
+                ? MoodBallComposerView.expandedHeightWithoutAttachments
+                : MoodBallComposerView.expandedHeightWithAttachments
+        )
+    }
+
+    private func captureRegionScreenshot() {
+        guard !isCapturingRegion,
+              let destination = model.commandClient.makeRegionCaptureURL() else { return }
+        isCapturingRegion = true
+        let petWasVisible = panel?.isVisible == true
+        let composerWasVisible = composerPanel?.isVisible == true
+        panel?.orderOut(nil)
+        composerPanel?.orderOut(nil)
+
+        let process = Process()
+        let errorPipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        process.arguments = ["-i", "-s", "-x", destination.path]
+        process.standardError = errorPipe
+        process.terminationHandler = { [weak self] process in
+            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            let captureError = String(data: errorData, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.isCapturingRegion = false
+                if process.terminationStatus == 0,
+                   FileManager.default.fileExists(atPath: destination.path) {
+                    self.model.commandClient.acceptRegionCapture(at: destination)
+                } else {
+                    self.model.commandClient.cancelRegionCapture(at: destination)
+                    if !captureError.isEmpty {
+                        self.model.commandClient.reportRegionCaptureFailure(captureError)
+                    }
+                }
+                if petWasVisible { self.panel?.orderFrontRegardless() }
+                if composerWasVisible {
+                    self.model.openComposer(focus: true)
+                    self.updateComposerPanel()
+                }
+            }
+        }
+        do {
+            try process.run()
+        } catch {
+            isCapturingRegion = false
+            model.commandClient.cancelRegionCapture(at: destination)
+            model.commandClient.reportRegionCaptureFailure(error.localizedDescription)
+            if petWasVisible { panel?.orderFrontRegardless() }
+            if composerWasVisible { updateComposerPanel() }
+            appLog.error("region screenshot failed to start: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     private var isMiniMode: Bool {

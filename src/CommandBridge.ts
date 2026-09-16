@@ -2,7 +2,10 @@ import { createServer, type Server, type Socket } from 'node:net'
 import { chmodSync, existsSync, lstatSync, mkdirSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import type { PromptContentPart } from '@deepseek-ai/dsh-api-session-controller'
 import type { MoodBridgePayload } from './LocalStateBridge.js'
+
+type PromptImageMediaType = Extract<PromptContentPart, { type: 'image' }>['mediaType']
 
 /** A detached workspace projection exposed to MoodBall.app. */
 export interface MoodballWorkspace {
@@ -23,10 +26,48 @@ export interface PromptCommand {
   sessionId: string
   requestId: string
   text: string
+  images: readonly PromptImage[]
+}
+
+export interface PromptImage {
+  mediaType: PromptImageMediaType
+  data: string
+  name?: string
+}
+
+/** Deployment-resolved image admission policy exposed by Harness. */
+export interface ImageAttachmentLimits {
+  maxImageBytes: number
+  maxImagesPerMessage: number
+  maxMessageImageBytes: number
+  maxImagePixels: number
+  maxImageDimension: number
+  mediaTypes: readonly string[]
+}
+
+/** A cold-safe ordinary Session projection for the task cards. */
+export interface MoodballTask {
+  sessionId: string
+  workspaceId: string
+  title: string
+  cwd?: string
+  updatedAt: number
+  running: boolean
+  blank: boolean
+  state: 'disconnected' | 'idle' | 'thinking' | 'toolCalling' | 'waitingApproval' | 'waitingUserAnswer' | 'completed' | 'failed' | 'stopped'
+  mood: string
+  taskRunning: boolean
+  waitingForUser: boolean
+  failed: boolean
+  completed: boolean
+  tool?: string
+  message?: string
 }
 
 export interface CommandHandlers {
+  imageAttachmentLimits: ImageAttachmentLimits
   listWorkspaces: () => Promise<readonly MoodballWorkspace[]>
+  listTasks: () => Promise<readonly MoodballTask[]>
   createSession: (request: CreateSessionCommand) => Promise<{ sessionId: string }>
   prompt: (request: PromptCommand) => Promise<{ accepted: true; sessionId: string }>
   snapshotFor: (sessionId: string) => MoodBridgePayload | undefined
@@ -35,7 +76,10 @@ export interface CommandHandlers {
 interface ClientState {
   socket: Socket
   buffer: string
+  bufferBytes: number
+  discardingOversizedLine: boolean
   subscriptions: Set<string>
+  taskSubscription: boolean
   operationTail: Promise<void>
 }
 
@@ -46,7 +90,10 @@ interface CommandRequest {
   sessionId?: unknown
   requestId?: unknown
   text?: unknown
+  images?: unknown
 }
+
+const COMMAND_METADATA_BYTES = 1024 * 1024
 
 class CommandError extends Error {
   constructor(
@@ -71,6 +118,7 @@ export class CommandBridge {
 
   private readonly socketPath: string
   private readonly handlers: CommandHandlers
+  private readonly maxCommandBytes: number
   private server: Server | undefined
   private ownsSocket = false
   private clients = new Set<ClientState>()
@@ -81,6 +129,7 @@ export class CommandBridge {
   ) {
     this.handlers = handlers
     this.socketPath = socketPath
+    this.maxCommandBytes = maxCommandBytes(handlers.imageAttachmentLimits)
   }
 
   start(): void {
@@ -100,14 +149,25 @@ export class CommandBridge {
       const client: ClientState = {
         socket,
         buffer: '',
+        bufferBytes: 0,
+        discardingOversizedLine: false,
         subscriptions: new Set(),
+        taskSubscription: false,
         operationTail: Promise.resolve(),
       }
       this.clients.add(client)
       socket.setNoDelay(true)
       socket.setEncoding('utf8')
       socket.on('data', chunk => {
-        client.buffer += String(chunk)
+        let text = String(chunk)
+        if (client.discardingOversizedLine) {
+          const newline = text.indexOf('\n')
+          if (newline < 0) return
+          client.discardingOversizedLine = false
+          text = text.slice(newline + 1)
+        }
+        client.buffer += text
+        client.bufferBytes += Buffer.byteLength(text)
         this.consume(client)
       })
       socket.on('close', () => this.clients.delete(client))
@@ -135,6 +195,14 @@ export class CommandBridge {
     }
   }
 
+  /** Push a replacement task projection to clients that requested task updates. */
+  publishTasks(tasks: readonly MoodballTask[]): void {
+    for (const client of this.clients) {
+      if (!client.taskSubscription) continue
+      this.write(client.socket, { event: 'tasks', tasks })
+    }
+  }
+
   stop(): void {
     for (const client of this.clients) client.socket.destroy()
     this.clients.clear()
@@ -151,16 +219,21 @@ export class CommandBridge {
   private consume(client: ClientState): void {
     while (true) {
       const newline = client.buffer.indexOf('\n')
-      if (newline < 0) return
+      if (newline < 0) {
+        if (client.bufferBytes > this.maxCommandBytes) {
+          client.buffer = ''
+          client.bufferBytes = 0
+          client.discardingOversizedLine = true
+          this.rejectOversizedRequest(client.socket)
+        }
+        return
+      }
       const line = client.buffer.slice(0, newline)
       client.buffer = client.buffer.slice(newline + 1)
+      client.bufferBytes -= Buffer.byteLength(`${line}\n`)
       if (line.trim() === '') continue
-      if (line.length > 128 * 1024) {
-        this.write(client.socket, {
-          id: null,
-          ok: false,
-          error: { code: 'request-too-large', message: 'command request is too large' },
-        })
+      if (Buffer.byteLength(line) > this.maxCommandBytes) {
+        this.rejectOversizedRequest(client.socket)
         continue
       }
       client.operationTail = client.operationTail
@@ -173,6 +246,14 @@ export class CommandBridge {
           })
         })
     }
+  }
+
+  private rejectOversizedRequest(socket: Socket): void {
+    this.write(socket, {
+      id: null,
+      ok: false,
+      error: { code: 'request-too-large', message: 'command request exceeds the deployment image limits' },
+    })
   }
 
   private async handle(client: ClientState, line: string): Promise<void> {
@@ -196,12 +277,31 @@ export class CommandBridge {
           protocolVersion: 1,
           commandSocket: true,
           statusSubscription: true,
-          supports: ['workspaces', 'createSession', 'prompt', 'subscribe', 'unsubscribe'],
+          supports: [
+            'workspaces', 'tasks', 'subscribeTasks', 'unsubscribeTasks',
+            'createSession', 'prompt', 'imageAttachments', 'subscribe', 'unsubscribe',
+          ],
+          attachmentLimits: this.handlers.imageAttachmentLimits,
+          maxCommandBytes: this.maxCommandBytes,
         })
         return
       }
       if (action === 'workspaces') {
         this.respond(client.socket, id, { workspaces: await this.handlers.listWorkspaces() })
+        return
+      }
+      if (action === 'tasks') {
+        this.respond(client.socket, id, { tasks: await this.handlers.listTasks() })
+        return
+      }
+      if (action === 'subscribeTasks') {
+        client.taskSubscription = true
+        this.respond(client.socket, id, { tasks: await this.handlers.listTasks() })
+        return
+      }
+      if (action === 'unsubscribeTasks') {
+        client.taskSubscription = false
+        this.respond(client.socket, id, {})
         return
       }
       if (action === 'createSession') {
@@ -215,9 +315,12 @@ export class CommandBridge {
         const workspaceId = stringField(request.workspaceId, 'workspaceId')
         const sessionId = stringField(request.sessionId, 'sessionId')
         const requestId = stringField(request.requestId, 'requestId')
-        const text = stringField(request.text, 'text')
-        if (text.trim() === '') throw new CommandError('empty-prompt', 'prompt text must not be blank')
-        const result = await this.handlers.prompt({ workspaceId, sessionId, requestId, text })
+        const text = optionalStringField(request.text, 'text') ?? ''
+        const images = imageFields(request.images, this.handlers.imageAttachmentLimits)
+        if (text.trim() === '' && images.length === 0) {
+          throw new CommandError('empty-prompt', 'prompt must include non-whitespace text or an image')
+        }
+        const result = await this.handlers.prompt({ workspaceId, sessionId, requestId, text, images })
         this.respond(client.socket, id, result)
         return
       }
@@ -242,7 +345,7 @@ export class CommandBridge {
         id,
         ok: false,
         error: {
-          code: error instanceof CommandError ? error.code : 'command-failed',
+          code: commandErrorCode(error),
           message: errorMessage(error),
         },
       })
@@ -263,6 +366,72 @@ function stringField(value: unknown, name: string): string {
     throw new CommandError('invalid-request', `${name} must be a non-empty string`)
   }
   return value
+}
+
+function optionalStringField(value: unknown, name: string): string | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'string') throw new CommandError('invalid-request', `${name} must be a string`)
+  return value
+}
+
+function imageFields(value: unknown, limits: ImageAttachmentLimits): readonly PromptImage[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value)) throw new CommandError('invalid-request', 'images must be an array')
+  if (value.length > limits.maxImagesPerMessage) {
+    throw new CommandError('session/attachment-invalid', 'Image batch exceeds the configured image-count limit.')
+  }
+
+  let aggregateBytes = 0
+  return value.map((candidate, index) => {
+    if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      throw new CommandError('invalid-request', `images[${index}] must be an object`)
+    }
+    const image = candidate as Record<string, unknown>
+    const mediaType = stringField(image.mediaType, `images[${index}].mediaType`)
+    if (!limits.mediaTypes.includes(mediaType)) {
+      throw new CommandError(
+        'session/attachment-invalid',
+        `Image type ${mediaType} is not accepted by this deployment.`,
+      )
+    }
+    const data = stringField(image.data, `images[${index}].data`)
+    const name = optionalStringField(image.name, `images[${index}].name`)
+    const bytes = canonicalBase64Bytes(data)
+    if (bytes > limits.maxImageBytes) {
+      throw new CommandError('session/attachment-invalid', 'Image exceeds the configured image-byte limit.')
+    }
+    aggregateBytes += bytes
+    if (aggregateBytes > limits.maxMessageImageBytes) {
+      throw new CommandError('session/attachment-invalid', 'Image batch exceeds the configured aggregate image-byte limit.')
+    }
+    return { mediaType: mediaType as PromptImageMediaType, data, ...(name === undefined ? {} : { name }) }
+  })
+}
+
+function canonicalBase64Bytes(data: string): number {
+  if (data.length === 0 || data.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(data)) {
+    throw new CommandError('session/attachment-invalid', 'Image upload is not canonical base64.')
+  }
+  const padding = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0
+  return (data.length / 4) * 3 - padding
+}
+
+function maxCommandBytes(limits: ImageAttachmentLimits): number {
+  const aggregateBytes = Math.min(
+    limits.maxMessageImageBytes,
+    limits.maxImageBytes * limits.maxImagesPerMessage,
+  )
+  const base64Bytes = Math.ceil(aggregateBytes / 3) * 4
+  return Math.min(Number.MAX_SAFE_INTEGER, base64Bytes + COMMAND_METADATA_BYTES)
+}
+
+function commandErrorCode(error: unknown): string {
+  if (error instanceof CommandError) return error.code
+  if (error !== null && typeof error === 'object' && 'code' in error) {
+    const code = (error as { code?: unknown }).code
+    if (typeof code === 'string' && code !== '') return code
+  }
+  return 'command-failed'
 }
 
 function asObject(value: unknown): Record<string, unknown> {

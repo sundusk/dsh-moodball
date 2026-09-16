@@ -60,6 +60,7 @@ test('plugin adapter calls official-style workspace and session services', async
   let statusRoute
   const cleanups = []
   const calls = []
+  let sessionRunning = false
   const workspace = {
     id: 'workspace-test',
     title: 'Test workspace',
@@ -68,6 +69,16 @@ test('plugin adapter calls official-style workspace and session services', async
     status: async () => 'ok',
   }
   const ctx = {
+    attachments: {
+      imageLimits: {
+        maxImageBytes: 20,
+        maxImagesPerMessage: 2,
+        maxMessageImageBytes: 30,
+        maxImagePixels: 100,
+        maxImageDimension: 10,
+        mediaTypes: ['image/png', 'image/jpeg'],
+      },
+    },
     workspaceRegistry: {
       list: () => [workspace],
       get: id => String(id) === workspace.id ? workspace : undefined,
@@ -77,6 +88,21 @@ test('plugin adapter calls official-style workspace and session services', async
         workspace.sessionIds.push(request.sessionId)
         return { sessionId: request.sessionId }
       },
+      list: async () => ({ items: workspace.sessionIds.map(sessionId => ({
+        sessionId,
+        updatedAt: 100,
+        running: sessionRunning,
+        blank: false,
+        cwd: root,
+      })).concat(workspace.sessionIds.length > 0 ? [{
+        sessionId: 'internal-child',
+        updatedAt: 101,
+        running: true,
+        blank: false,
+        parentSessionId: workspace.sessionIds[0],
+        origin: 'subagent',
+        cwd: root,
+      }] : []) }),
       prompt: async request => {
         calls.push(request)
         return { accepted: true }
@@ -115,6 +141,12 @@ test('plugin adapter calls official-style workspace and session services', async
     assert.equal(subscribed.snapshot.workspaceId, workspace.id)
     assert.equal(subscribed.snapshot.mood, 'idle')
 
+    const taskSubscription = await command(socket, nextLine, 'tasks', 'subscribeTasks')
+    assert.deepEqual(taskSubscription.tasks.map(task => task.sessionId), ['moodball-session-test'])
+    assert.equal(taskSubscription.tasks[0].sessionId, 'moodball-session-test')
+    assert.equal(taskSubscription.tasks[0].workspaceId, workspace.id)
+    assert.equal(taskSubscription.tasks[0].state, 'idle')
+
     const prompted = await command(socket, nextLine, 'prompt', 'prompt', {
       workspaceId: workspace.id,
       sessionId: 'moodball-session-test',
@@ -125,11 +157,28 @@ test('plugin adapter calls official-style workspace and session services', async
     assert.equal(calls[0].mode, 'queue')
     assert.deepEqual(calls[0].content, [{ type: 'text', text: 'hello' }])
 
+    const imagePrompted = await command(socket, nextLine, 'prompt-image', 'prompt', {
+      workspaceId: workspace.id,
+      sessionId: 'moodball-session-test',
+      requestId: 'request-image',
+      text: '',
+      images: [{ mediaType: 'image/png', data: 'aGVsbG8=', name: 'capture.png' }],
+    })
+    assert.equal(imagePrompted.accepted, true)
+    assert.deepEqual(calls[1].content, [{
+      type: 'image', mediaType: 'image/png', data: 'aGVsbG8=', name: 'capture.png',
+    }])
+
+    sessionRunning = true
     eventHandler({ id: 'moodball-session-test' }, { type: 'turn/start' })
     const event = await nextLine()
     assert.equal(event.event, 'status')
     assert.equal(event.snapshot.mood, 'waiting')
     assert.equal(event.snapshot.taskRunning, true)
+
+    const taskEvent = await nextLine()
+    assert.equal(taskEvent.event, 'tasks')
+    assert.equal(taskEvent.tasks[0].mood, 'waiting')
 
     let routeBody
     statusRoute.handler(
