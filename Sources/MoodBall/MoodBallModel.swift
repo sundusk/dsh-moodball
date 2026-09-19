@@ -26,10 +26,16 @@ enum MoodColorMap {
     }
 }
 
-enum MoodBallComposerPhase: Equatable {
+enum MoodBallBarPhase: Equatable {
     case resting
     case hovering
-    case expanded
+    case composer
+}
+
+enum MoodBallTaskPanelMode: Equatable {
+    case closed
+    case active
+    case recent
 }
 
 /// Presentation model. It only consumes MoodBridgeSnapshot and shared settings;
@@ -46,13 +52,12 @@ final class MoodBallModel: ObservableObject {
     @Published private(set) var breathingPeriod: Double = 2.0
     @Published private(set) var connectionState: ConnectionState = .unreachable
     @Published private(set) var transportKind: TransportKind = .disconnected
-    @Published private(set) var composerPhase: MoodBallComposerPhase = .resting
+    @Published private(set) var barPhase: MoodBallBarPhase = .resting
+    @Published private(set) var taskPanelMode: MoodBallTaskPanelMode = .closed
     @Published private(set) var composerFocusRequest = 0
-    /// Session-only choice; a new app launch starts folded by design.
-    @Published var taskListExpanded = false
+    @Published private(set) var composerInputHeight: CGFloat = 38
 
     let commandClient = MoodBallCommandClient()
-    var onRegionScreenshotRequested: (() -> Void)?
 
     /// Menu bar status text includes the active transport without exposing its
     /// implementation to the views.
@@ -106,7 +111,7 @@ final class MoodBallModel: ObservableObject {
                 }
             }
         commandClient.onAccepted = { [weak self] in
-            self?.composerPhase = .resting
+            self?.barPhase = .resting
         }
     }
 
@@ -139,24 +144,49 @@ final class MoodBallModel: ObservableObject {
     }
 
     func setComposerHovering(_ hovering: Bool) {
-        guard composerPhase != .expanded else { return }
-        composerPhase = hovering ? .hovering : .resting
+        guard barPhase != .composer else { return }
+        barPhase = hovering || taskPanelMode != .closed ? .hovering : .resting
     }
 
     func openComposer(focus: Bool = false) {
-        composerPhase = .expanded
+        closeTaskPanel()
+        barPhase = .composer
         if focus { composerFocusRequest &+= 1 }
         commandClient.refreshWorkspaces()
     }
 
     func collapseComposer() {
-        composerPhase = .resting
+        barPhase = .resting
     }
 
-    func toggleTaskList() {
-        guard commandClient.currentWorkspaceTasks.count > 1 else { return }
+    func toggleTaskPanel(_ mode: MoodBallTaskPanelMode) {
+        guard mode != .closed else {
+            closeTaskPanel()
+            return
+        }
+        if taskPanelMode == mode {
+            closeTaskPanel()
+            return
+        }
+
+        if taskPanelMode == .active {
+            commandClient.endActiveTaskPresentation()
+        }
         commandClient.clearFocusedTask()
-        taskListExpanded.toggle()
+        taskPanelMode = mode
+        barPhase = .hovering
+        if mode == .active {
+            commandClient.beginActiveTaskPresentation()
+        }
+    }
+
+    func closeTaskPanel() {
+        guard taskPanelMode != .closed else { return }
+        if taskPanelMode == .active {
+            commandClient.endActiveTaskPresentation()
+        }
+        commandClient.clearFocusedTask()
+        taskPanelMode = .closed
     }
 
     func focusTask(_ id: String) {
@@ -176,17 +206,16 @@ final class MoodBallModel: ObservableObject {
         commandClient.submitDraft()
     }
 
-    func pasteImage() {
-        commandClient.addImageFromPasteboard()
-    }
-
-    func captureRegion() {
-        onRegionScreenshotRequested?()
+    func setComposerInputHeight(_ height: CGFloat) {
+        let clamped = min(max(height, 38), 96)
+        guard abs(composerInputHeight - clamped) > 0.5 else { return }
+        composerInputHeight = clamped
     }
 
     func startNewSession() {
         commandClient.startNewSession()
-        composerPhase = .expanded
+        closeTaskPanel()
+        barPhase = .composer
     }
 
     func openHarness() {

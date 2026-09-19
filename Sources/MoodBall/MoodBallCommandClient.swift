@@ -93,6 +93,14 @@ final class MoodBallCommandClient: ObservableObject {
 
     var onAccepted: (() -> Void)?
 
+    var showsComposerStatusLine: Bool {
+        connection != .connected
+            || !capabilitiesAvailable
+            || workspaces.isEmpty
+            || submissionStatus.label != nil
+            || lastError != nil
+    }
+
     private enum Keys {
         static let workspaceID = "moodball.command.workspaceID"
         static let sessionID = "moodball.command.sessionID"
@@ -123,6 +131,7 @@ final class MoodBallCommandClient: ObservableObject {
     private var reconnectTask: Task<Void, Never>?
     private var readMarkers: [String: TaskReadMarker] = [:]
     private var hasReceivedTaskBaseline = false
+    private var presentedActiveTaskIDs: Set<String>?
 
     init(defaults: UserDefaults = .standard, socketPath: String = MoodBallCommandClient.defaultSocketPath) {
         self.defaults = defaults
@@ -133,11 +142,9 @@ final class MoodBallCommandClient: ObservableObject {
         pendingRequestID = defaults.string(forKey: Keys.requestID)
         pendingRequestText = defaults.string(forKey: Keys.requestText)
         pendingRequestSignature = defaults.string(forKey: Keys.requestSignature)
-        if let data = defaults.data(forKey: Keys.draftImages),
-           let decoded = try? JSONDecoder().decode([MoodBallDraftImage].self, from: data) {
-            draftImages = decoded.filter { FileManager.default.fileExists(atPath: $0.path) }
-            persistDraftImages()
-        }
+        // Attachments are no longer exposed by the MoodBall composer. Ignore
+        // any legacy persisted draft metadata so it can never be sent unseen.
+        defaults.removeObject(forKey: Keys.draftImages)
         if let data = defaults.data(forKey: Keys.taskReadMarkers),
            let markers = try? JSONDecoder().decode([String: TaskReadMarker].self, from: data) {
             readMarkers = markers
@@ -163,16 +170,34 @@ final class MoodBallCommandClient: ObservableObject {
         return tasks.filter { $0.workspaceID == selectedWorkspaceID }
     }
 
+    /// Tasks that still need attention in the selected workspace. While the
+    /// active-task panel is open, its opening snapshot remains visible so a
+    /// result does not disappear immediately after the user reads it.
+    var activeTasks: [MoodBallTaskSummary] {
+        currentWorkspaceTasks
+            .filter { task in
+                return isTaskActive(task) || (presentedActiveTaskIDs?.contains(task.id) == true)
+            }
+            .sorted(by: activeTaskPrecedes)
+    }
+
+    /// The five most recently updated, non-empty tasks which are not currently
+    /// shown by the active-task classification (including its presentation
+    /// snapshot).
+    var recentTasks: [MoodBallTaskSummary] {
+        let activeTaskIDs = Set(activeTasks.map(\.id))
+        return Array(
+            currentWorkspaceTasks
+                .filter { !$0.blank && !activeTaskIDs.contains($0.id) }
+                .sorted(by: recentTaskPrecedes)
+                .prefix(5)
+        )
+    }
+
     /// Task-center order: waiting for a user action, unread failures, unread
     /// completions, running work, then the remaining recent Sessions.
     var sortedTasks: [MoodBallTaskSummary] {
-        currentWorkspaceTasks.sorted { left, right in
-            let leftRank = taskRank(left)
-            let rightRank = taskRank(right)
-            if leftRank != rightRank { return leftRank < rightRank }
-            if left.updatedAt != right.updatedAt { return left.updatedAt > right.updatedAt }
-            return left.title.localizedStandardCompare(right.title) == .orderedAscending
-        }
+        currentWorkspaceTasks.sorted(by: taskPrecedes)
     }
 
     var focusedTask: MoodBallTaskSummary? {
@@ -181,8 +206,8 @@ final class MoodBallCommandClient: ObservableObject {
     }
 
     var unreadTaskCount: Int {
-        currentWorkspaceTasks.reduce(into: 0) { count, task in
-            if isTaskUnread(task) { count += 1 }
+        activeTasks.reduce(into: 0) { count, task in
+            if isTaskUnread(task) && (task.completed || task.failed) { count += 1 }
         }
     }
 
@@ -325,6 +350,7 @@ final class MoodBallCommandClient: ObservableObject {
         if selectedWorkspaceID != id {
             selectedWorkspaceID = id
             defaults.set(id, forKey: Keys.workspaceID)
+            presentedActiveTaskIDs = nil
             clearSessionBinding()
             focusedTaskID = nil
         }
@@ -351,6 +377,18 @@ final class MoodBallCommandClient: ObservableObject {
     func clearFocusedTask() {
         focusedTaskID = nil
         continuationWarning = nil
+    }
+
+    /// Freeze the active-task panel's visible membership until it closes.
+    func beginActiveTaskPresentation() {
+        guard presentedActiveTaskIDs == nil else { return }
+        presentedActiveTaskIDs = Set(activeTasks.map(\.id))
+    }
+
+    /// Release the presentation snapshot. Read terminal tasks then migrate to
+    /// `recentTasks` on the next classification pass.
+    func endActiveTaskPresentation() {
+        presentedActiveTaskIDs = nil
     }
 
     /// Select a task as the input target. A non-empty draft blocks switching
@@ -876,7 +914,14 @@ final class MoodBallCommandClient: ObservableObject {
     /// Task-card history and the pet's live animation are separate state
     /// channels. In particular, a retained done/failed card must never replace
     /// the live Session snapshot merely because the card list refreshed.
-    func applyTaskSummaries(_ decoded: [MoodBallTaskSummary]) {
+    func applyTaskSummaries(_ decoded: [MoodBallTaskSummary], establishesBaseline: Bool = false) {
+        if establishesBaseline {
+            for task in decoded {
+                readMarkers[task.id] = TaskReadMarker(updatedAt: task.updatedAt, mood: task.mood)
+            }
+            hasReceivedTaskBaseline = true
+            persistReadMarkers()
+        }
         tasks = decoded
     }
 
@@ -887,6 +932,9 @@ final class MoodBallCommandClient: ObservableObject {
     }
 
     private func markTaskRead(_ task: MoodBallTaskSummary) {
+        if presentedActiveTaskIDs != nil, isTaskActive(task) {
+            presentedActiveTaskIDs?.insert(task.id)
+        }
         readMarkers[task.id] = TaskReadMarker(updatedAt: task.updatedAt, mood: task.mood)
         persistReadMarkers()
     }
@@ -902,6 +950,45 @@ final class MoodBallCommandClient: ObservableObject {
         if isTaskUnread(task) && task.completed { return 2 }
         if task.taskRunning || task.running { return 3 }
         return 4
+    }
+
+    private func isTaskActive(_ task: MoodBallTaskSummary) -> Bool {
+        task.waitingForUser
+            || task.taskRunning
+            || task.running
+            || (isTaskUnread(task) && (task.completed || task.failed))
+    }
+
+    private func taskPrecedes(_ left: MoodBallTaskSummary, _ right: MoodBallTaskSummary) -> Bool {
+        let leftRank = taskRank(left)
+        let rightRank = taskRank(right)
+        if leftRank != rightRank { return leftRank < rightRank }
+        return recentTaskPrecedes(left, right)
+    }
+
+    /// Presentation membership preserves terminal cards after they are read;
+    /// their visual priority must remain failure/completion instead of falling
+    /// behind running work while the same panel is still open.
+    private func activeTaskPrecedes(_ left: MoodBallTaskSummary, _ right: MoodBallTaskSummary) -> Bool {
+        let leftRank = activeTaskRank(left)
+        let rightRank = activeTaskRank(right)
+        if leftRank != rightRank { return leftRank < rightRank }
+        return recentTaskPrecedes(left, right)
+    }
+
+    private func activeTaskRank(_ task: MoodBallTaskSummary) -> Int {
+        if task.waitingForUser { return 0 }
+        if task.failed { return 1 }
+        if task.completed { return 2 }
+        if task.taskRunning || task.running { return 3 }
+        return 4
+    }
+
+    private func recentTaskPrecedes(_ left: MoodBallTaskSummary, _ right: MoodBallTaskSummary) -> Bool {
+        if left.updatedAt != right.updatedAt { return left.updatedAt > right.updatedAt }
+        let titleOrder = left.title.localizedStandardCompare(right.title)
+        if titleOrder != .orderedSame { return titleOrder == .orderedAscending }
+        return left.id < right.id
     }
 }
 

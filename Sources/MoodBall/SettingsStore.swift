@@ -502,6 +502,7 @@ typealias SettingsStore = PetSettings
 extension Notification.Name {
     static let waterballResetPosition = Notification.Name("waterballResetPosition")
     static let waterballToggleSettings = Notification.Name("waterballToggleSettings")
+    static let moodBallComposerPanelMoved = Notification.Name("moodBallComposerPanelMoved")
 }
 
 func colorToHex(_ color: Color) -> UInt32 {

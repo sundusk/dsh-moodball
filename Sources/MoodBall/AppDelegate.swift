@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Combine
+import QuartzCore
 import os
 
 private let appLog = Logger(subsystem: "com.sundusk.moodball", category: "app")
@@ -69,11 +70,24 @@ final class MoodBallComposerPanel: NSPanel {
     override var acceptsFirstResponder: Bool { true }
 }
 
+final class MoodBallTaskPanel: NSPanel {
+    var onCancel: (() -> Void)?
+
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+    override var acceptsFirstResponder: Bool { true }
+
+    override func cancelOperation(_ sender: Any?) {
+        onCancel?()
+    }
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = MoodBallModel.shared
     private var panel: MoodBallPanel?
     private var composerPanel: MoodBallComposerPanel?
+    private var taskPanel: MoodBallTaskPanel?
     private var settingsPanel: NSPanel?
     private var statePreviewPanel: NSPanel?
     private var hoverMonitors: [Any] = []
@@ -81,7 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsSink: AnyCancellable?
     private var bubbleSink: AnyCancellable?
     private var composerSink: AnyCancellable?
-    private var taskLayoutSink: AnyCancellable?
+    private var taskPanelSink: AnyCancellable?
     private var commandSink: AnyCancellable?
     private var hotKeySink: AnyCancellable?
     private var resignObserver: NSObjectProtocol?
@@ -93,7 +107,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var shortcutMenuItems: [MoodBallShortcutAction: [NSMenuItem]] = [:]
     private var lastIconColor: Color?
     private let globalHotKeyManager = GlobalHotKeyManager()
-    private var isCapturingRegion = false
+    private var taskPanelEventMonitors: [Any] = []
+    private var isTaskPanelClosing = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 单实例守卫：若已有同 Bundle ID 的实例在运行，本实例立即退出。
@@ -113,7 +128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         setupPanel()
         setupComposerPanel()
-        model.onRegionScreenshotRequested = { [weak self] in self?.captureRegionScreenshot() }
+        setupTaskPanel()
         setupGlobalHotKey()
         model.start()
         startHoverMonitor()
@@ -142,12 +157,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: .waterballToggleSettings,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(composerPanelMoved),
+            name: .moodBallComposerPanelMoved,
+            object: nil
+        )
         appLog.info("didFinishLaunching done")
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         model.stop()
-        model.onRegionScreenshotRequested = nil
         for monitor in hoverMonitors {
             NSEvent.removeMonitor(monitor)
         }
@@ -158,14 +178,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusSink = nil
         composerSink?.cancel()
         composerSink = nil
-        taskLayoutSink?.cancel()
-        taskLayoutSink = nil
+        taskPanelSink?.cancel()
+        taskPanelSink = nil
         commandSink?.cancel()
         commandSink = nil
         hotKeySink?.cancel()
         hotKeySink = nil
         if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
         resignObserver = nil
+        removeTaskPanelEventMonitors()
+        model.closeTaskPanel()
+    }
+
+    func applicationWillHide(_ notification: Notification) {
+        model.closeTaskPanel()
+        model.collapseComposer()
     }
 
     // MARK: - 悬浮窗
@@ -223,10 +250,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         p.hidesOnDeactivate = false
         p.animationBehavior = .none
         p.isExcludedFromWindowsMenu = true
-        p.contentView = NSHostingView(rootView: MoodBallComposerView(model: model, command: model.commandClient))
+        let hosting = NSHostingView(rootView: MoodBallComposerView(model: model, command: model.commandClient))
+        hosting.wantsLayer = true
+        hosting.layer?.backgroundColor = NSColor.clear.cgColor
+        p.contentView = hosting
         self.composerPanel = p
         MoodBallComposerPanel.current = p
         updateComposerPanel()
+    }
+
+    private func setupTaskPanel() {
+        let p = MoodBallTaskPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 340, height: 340),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        p.isOpaque = false
+        p.backgroundColor = .clear
+        p.hasShadow = false
+        p.level = .floating
+        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        p.ignoresMouseEvents = false
+        p.isReleasedWhenClosed = false
+        p.hidesOnDeactivate = false
+        p.animationBehavior = .none
+        p.isExcludedFromWindowsMenu = true
+        let hosting = NSHostingView(rootView: MoodBallTaskPanelView(model: model, command: model.commandClient))
+        hosting.wantsLayer = true
+        p.contentView = hosting
+        p.onCancel = { [weak self] in self?.model.closeTaskPanel() }
+        self.taskPanel = p
     }
 
     private func positionAtBottomRight(_ panel: NSPanel) {
@@ -255,6 +309,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     SettingsStore.shared.savedMiniPosition = miniOrigin
                 }
             }
+            updateTaskPanel()
             return
         }
         guard let panel, panel.isVisible else { return }
@@ -268,6 +323,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             positionAtBottomRight(panel)
             appLog.info("screen changed: ball center off-screen, repositioned to bottom-right")
         }
+        updateComposerPanel()
+        updateTaskPanel()
     }
 
     @objc private func resetPositionRequested() {
@@ -286,6 +343,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func toggleSettingsPanelNotification() {
         toggleSettingsPanel()
+    }
+
+    @objc private func composerPanelMoved() {
+        updateTaskPanel()
     }
 
     // MARK: - 设置联动
@@ -379,7 +440,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if settings.clickThroughMode != .always,
-           model.composerPhase != .expanded {
+           model.barPhase != .composer {
             let controlFrame = composerPanel?.frame.insetBy(dx: -14, dy: -18)
             let bridgeFrame: NSRect?
             if let panel, panel.isVisible {
@@ -394,7 +455,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 bridgeFrame = nil
             }
-            model.setComposerHovering(insideBall || controlFrame?.contains(mouse) == true || bridgeFrame?.contains(mouse) == true)
+            let insideTaskPanel = taskPanel?.isVisible == true && taskPanel?.frame.contains(mouse) == true
+            model.setComposerHovering(
+                insideBall
+                    || controlFrame?.contains(mouse) == true
+                    || bridgeFrame?.contains(mouse) == true
+                    || insideTaskPanel
+            )
         }
         updateComposerPanel()
 
@@ -420,20 +487,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - 输入控件面板
 
     private func observeComposer() {
-        composerSink = model.$composerPhase
+        composerSink = Publishers.CombineLatest(model.$barPhase, model.$composerInputHeight)
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
+            .sink { [weak self] _, _ in
                 self?.updateComposerPanel()
             }
-        taskLayoutSink = model.$taskListExpanded
+        taskPanelSink = model.$taskPanelMode
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.updateComposerPanel()
+                self?.updateTaskPanel()
+                self?.updateHover()
             }
         commandSink = model.commandClient.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                self?.updateComposerPanel()
+                DispatchQueue.main.async {
+                    self?.updateComposerPanel()
+                    self?.updateTaskPanel()
+                }
             }
         resignObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didResignActiveNotification,
@@ -441,7 +513,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self, self.model.composerPhase == .expanded, !self.isCapturingRegion else { return }
+                guard let self, self.model.barPhase == .composer else { return }
                 self.model.collapseComposer()
             }
         }
@@ -452,106 +524,178 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = SettingsStore.shared
         guard settings.isBallVisible else {
             composerPanel.orderOut(nil)
+            model.closeTaskPanel()
             return
         }
 
         let size: NSSize
-        if settings.displayMode == .controlsOnly {
-            switch model.composerPhase {
-            case .resting, .hovering:
-                size = taskSurfaceSize
-            case .expanded:
-                size = expandedComposerSize
-            }
-        } else {
-            switch model.composerPhase {
-            case .resting:
-                size = NSSize(width: 72, height: 18)
-            case .hovering:
-                size = taskSurfaceSize
-            case .expanded:
-                size = expandedComposerSize
-            }
+        switch model.barPhase {
+        case .resting:
+            size = NSSize(
+                width: MoodBallComposerView.restingPanelWidth,
+                height: MoodBallComposerView.restingPanelHeight
+            )
+        case .hovering:
+            size = NSSize(
+                width: MoodBallComposerView.expandedBarPanelWidth,
+                height: MoodBallComposerView.expandedBarPanelHeight
+            )
+        case .composer:
+            size = expandedComposerSize
         }
         if !composerPanel.isMiniDragging {
             composerPanel.setFrame(composerFrame(size: size), display: true)
         }
-        if model.composerPhase == .expanded {
+        if model.barPhase == .composer {
             composerPanel.ignoresMouseEvents = false
         } else if isMiniMode {
             composerPanel.ignoresMouseEvents = settings.clickThroughMode == .always
         } else {
             composerPanel.ignoresMouseEvents = settings.clickThroughMode != .never
-                && model.composerPhase != .hovering
+                && model.barPhase != .hovering
         }
         composerPanel.orderFrontRegardless()
-    }
-
-    private var taskSurfaceSize: NSSize {
-        let command = model.commandClient
-        let hasCards = command.taskListAvailable && !command.currentWorkspaceTasks.isEmpty
-        guard hasCards else { return NSSize(width: 120, height: 42) }
-        if command.focusedTask != nil { return NSSize(width: 320, height: 166) }
-        let count = model.taskListExpanded ? min(command.sortedTasks.count, 4) : 1
-        let height = 8 + 34 + 7 + CGFloat(count) * 58 + CGFloat(max(0, count - 1)) * 7
-        return NSSize(width: 320, height: height)
     }
 
     private var expandedComposerSize: NSSize {
         NSSize(
             width: 340,
-            height: model.commandClient.draftImages.isEmpty
-                ? MoodBallComposerView.expandedHeightWithoutAttachments
-                : MoodBallComposerView.expandedHeightWithAttachments
+            height: MoodBallComposerView.expandedComposerHeight(
+                inputHeight: model.composerInputHeight,
+                showsStatusLine: model.commandClient.showsComposerStatusLine
+            )
         )
     }
 
-    private func captureRegionScreenshot() {
-        guard !isCapturingRegion,
-              let destination = model.commandClient.makeRegionCaptureURL() else { return }
-        isCapturingRegion = true
-        let petWasVisible = panel?.isVisible == true
-        let composerWasVisible = composerPanel?.isVisible == true
-        panel?.orderOut(nil)
-        composerPanel?.orderOut(nil)
-
-        let process = Process()
-        let errorPipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-        process.arguments = ["-i", "-s", "-x", destination.path]
-        process.standardError = errorPipe
-        process.terminationHandler = { [weak self] process in
-            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            let captureError = String(data: errorData, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            DispatchQueue.main.async {
-                guard let self else { return }
-                self.isCapturingRegion = false
-                if process.terminationStatus == 0,
-                   FileManager.default.fileExists(atPath: destination.path) {
-                    self.model.commandClient.acceptRegionCapture(at: destination)
-                } else {
-                    self.model.commandClient.cancelRegionCapture(at: destination)
-                    if !captureError.isEmpty {
-                        self.model.commandClient.reportRegionCaptureFailure(captureError)
-                    }
+    private func updateTaskPanel() {
+        guard let taskPanel else { return }
+        let shouldShow = SettingsStore.shared.isBallVisible
+            && model.taskPanelMode != .closed
+        guard shouldShow else {
+            removeTaskPanelEventMonitors()
+            taskPanel.ignoresMouseEvents = true
+            guard taskPanel.isVisible else {
+                taskPanel.alphaValue = 1
+                isTaskPanelClosing = false
+                return
+            }
+            guard !isTaskPanelClosing,
+                  !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+                if !isTaskPanelClosing {
+                    taskPanel.orderOut(nil)
+                    taskPanel.alphaValue = 1
                 }
-                if petWasVisible { self.panel?.orderFrontRegardless() }
-                if composerWasVisible {
-                    self.model.openComposer(focus: true)
-                    self.updateComposerPanel()
+                return
+            }
+            isTaskPanelClosing = true
+            if let layer = taskPanel.contentView?.layer {
+                let scale = CABasicAnimation(keyPath: "transform.scale")
+                scale.fromValue = 1.0
+                scale.toValue = 0.96
+                scale.duration = 0.15
+                scale.timingFunction = CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
+                layer.add(scale, forKey: "moodball.taskPanel.closeScale")
+            }
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.15
+                context.timingFunction = CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
+                taskPanel.animator().alphaValue = 0
+            } completionHandler: { [weak self, weak taskPanel] in
+                Task { @MainActor in
+                    guard let self, let taskPanel else { return }
+                    self.isTaskPanelClosing = false
+                    if self.model.taskPanelMode == .closed || !SettingsStore.shared.isBallVisible {
+                        taskPanel.orderOut(nil)
+                    }
+                    taskPanel.alphaValue = 1
                 }
             }
+            return
         }
-        do {
-            try process.run()
-        } catch {
-            isCapturingRegion = false
-            model.commandClient.cancelRegionCapture(at: destination)
-            model.commandClient.reportRegionCaptureFailure(error.localizedDescription)
-            if petWasVisible { panel?.orderFrontRegardless() }
-            if composerWasVisible { updateComposerPanel() }
-            appLog.error("region screenshot failed to start: \(error.localizedDescription, privacy: .public)")
+
+        isTaskPanelClosing = false
+        let wasVisible = taskPanel.isVisible
+        let shouldAnimateOpening = !wasVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let size = NSSize(width: 340, height: 340)
+        taskPanel.setFrame(taskPanelFrame(size: size), display: true)
+        taskPanel.ignoresMouseEvents = false
+        taskPanel.alphaValue = shouldAnimateOpening ? 0 : 1
+        taskPanel.orderFrontRegardless()
+        installTaskPanelEventMonitors()
+
+        guard shouldAnimateOpening else { return }
+        if let layer = taskPanel.contentView?.layer {
+            let scale = CABasicAnimation(keyPath: "transform.scale")
+            scale.fromValue = 0.96
+            scale.toValue = 1.0
+            scale.duration = 0.2
+            scale.timingFunction = CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
+            layer.add(scale, forKey: "moodball.taskPanel.scale")
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.2
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
+            taskPanel.animator().alphaValue = 1
+        }
+    }
+
+    private func taskPanelFrame(size: NSSize) -> NSRect {
+        guard let anchor = composerPanel?.frame else { return NSRect(origin: .zero, size: size) }
+        let anchorCenter = NSPoint(x: anchor.midX, y: anchor.midY)
+        let screen = NSScreen.screens.first(where: { $0.visibleFrame.contains(anchorCenter) })
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+        let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let gap: CGFloat = 6
+        let x = min(max(anchor.midX - size.width / 2, visible.minX + 4), visible.maxX - size.width - 4)
+        let belowY = anchor.minY - size.height - gap
+        let aboveY = anchor.maxY + gap
+        let y = belowY >= visible.minY + 4
+            ? belowY
+            : min(aboveY, visible.maxY - size.height - 4)
+        return NSRect(x: x, y: max(visible.minY + 4, y), width: size.width, height: size.height)
+    }
+
+    private func installTaskPanelEventMonitors() {
+        guard taskPanelEventMonitors.isEmpty else { return }
+        let mouseEvents: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        if let local = NSEvent.addLocalMonitorForEvents(matching: mouseEvents.union(.keyDown), handler: { [weak self] event in
+            guard let self else { return event }
+            if event.type == .keyDown, event.keyCode == 53 {
+                Task { @MainActor in self.model.closeTaskPanel() }
+                return nil
+            }
+            if event.type == .leftMouseDown || event.type == .rightMouseDown || event.type == .otherMouseDown {
+                Task { @MainActor in self.closeTaskPanelIfClickIsOutside() }
+            }
+            return event
+        }) {
+            taskPanelEventMonitors.append(local)
+        }
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: mouseEvents, handler: { [weak self] _ in
+            Task { @MainActor [weak self] in self?.closeTaskPanelIfClickIsOutside() }
+        }) {
+            taskPanelEventMonitors.append(global)
+        }
+    }
+
+    private func removeTaskPanelEventMonitors() {
+        for monitor in taskPanelEventMonitors {
+            NSEvent.removeMonitor(monitor)
+        }
+        taskPanelEventMonitors.removeAll()
+    }
+
+    private func closeTaskPanelIfClickIsOutside() {
+        guard model.taskPanelMode != .closed else { return }
+        let point = NSEvent.mouseLocation
+        let visibleFrames = [panel, composerPanel, taskPanel]
+            .compactMap { candidate -> NSRect? in
+                guard let candidate, candidate.isVisible else { return nil }
+                return candidate.frame
+            }
+        if !visibleFrames.contains(where: { $0.contains(point) }) {
+            model.closeTaskPanel()
         }
     }
 
@@ -582,9 +726,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ?? NSScreen.main
             ?? NSScreen.screens.first
         let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        // The composer belongs to the pet's bottom edge. Keep only a small
-        // breathing gap so the hover affordance does not look detached.
-        let petControlGap: CGFloat = 4
+        // The idle capsule visually belongs to the pet's feet. Expanded
+        // surfaces retain a small breathing gap, while idle sits flush below.
+        let petControlGap: CGFloat = model.barPhase == .resting ? 0 : 4
         let x = min(max(centerX - size.width / 2, visible.minX + petControlGap), visible.maxX - size.width - petControlGap)
         let belowY = panel.frame.minY - size.height - petControlGap
         let y: CGFloat
@@ -631,6 +775,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .receive(on: RunLoop.main)
             .sink { [weak self] visible, displayMode in
                 guard let self else { return }
+                if !visible { self.model.closeTaskPanel() }
                 if visible, displayMode == .petAndControls {
                     if let panel = self.panel, !panel.isVisible {
                         panel.orderFrontRegardless()
@@ -639,6 +784,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.panel?.orderOut(nil)
                 }
                 self.updateComposerPanel()
+                self.updateTaskPanel()
                 self.updateHover()
                 appLog.info("display surfaces: visible=\(visible, privacy: .public) mode=\(displayMode.rawValue, privacy: .public)")
             }
