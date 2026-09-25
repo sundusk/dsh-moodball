@@ -305,7 +305,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         context.isExcludedFromWindowsMenu = true
         context.contentView = NSHostingView(rootView: PetContextView { [weak self] in
             self?.dismissPetContext()
-            SettingsStore.shared.displayMode = .controlsOnly
+            SettingsStore.shared.isBallVisible = false
         })
         petContextPanel = context
     }
