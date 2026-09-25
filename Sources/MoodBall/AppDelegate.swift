@@ -267,7 +267,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.showPetContext(at: point)
         }
 
-        let hosting = NSHostingView(rootView: MoodBallView(model: model, settings: SettingsStore.shared))
+        let hosting = NSHostingView(rootView: MoodBallView(
+            model: model,
+            settings: SettingsStore.shared,
+            onOpenDesktopHarness: { [weak self] in self?.openDesktopHarnessIfRunning() }
+        ))
         hosting.wantsLayer = true
         hosting.layer?.backgroundColor = NSColor.clear.cgColor
         panel.contentView = hosting
@@ -1221,6 +1225,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openHarnessFromMenu() {
         model.openHarness()
+    }
+
+    private func openDesktopHarnessIfRunning() {
+        // Official DeepSeek Harness uses com.deepseek.dsh for releases and a
+        // per-checkout com.deepseek.harness.dev.* ID for its development app.
+        let app = NSWorkspace.shared.runningApplications.first { running in
+            guard !running.isTerminated, let id = running.bundleIdentifier else { return false }
+            return id == "com.deepseek.dsh" || id.hasPrefix("com.deepseek.harness.dev.")
+        }
+        guard let app,
+              let bundleURL = app.bundleURL else { return }
+
+        // Reopening the running Electron app triggers its single-instance or
+        // activate handler, which restores a minimized or closed main window.
+        NSWorkspace.shared.openApplication(
+            at: bundleURL,
+            configuration: NSWorkspace.OpenConfiguration()
+        ) { _, error in
+            if let error {
+                appLog.error("could not reopen desktop Harness: \(error.localizedDescription)")
+            }
+        }
     }
 
     // MARK: - 设置面板
