@@ -9,8 +9,7 @@ import SwiftUI
 ///
 /// 附带拖拽手势：按住球体任意位置即可把整个悬浮窗拖到任何地方（位置会记住）。
 /// 非空闲状态时，在球脑门上方显示漫画风说话气泡（中文状态提醒），空闲时隐藏。
-/// 布局采用「球体底部锚定」：气泡出现时面板向上增高 bubbleHeight，球心距底边恒为
-/// ballSize，因此球的屏幕位置在气泡显隐切换时保持不变。
+/// 宠物底部锚定：面板随皮肤、发光和气泡调整大小，宠物脚底的屏幕位置保持不变。
 ///
 /// 状态来源：只消费 `MoodBallModel`（由 `AppCoordinator.activityState` 派生），
 /// 不接触任何 wire 事件 / DOM（规格 9 / 23）。
@@ -35,11 +34,33 @@ struct MoodBallView: View {
     /// 气泡尾巴尖端与球头顶部的间距
     static let tailGap: CGFloat = 4
 
+    static func petHeight(for skin: FloatingPetSkin, size: CGFloat, glowEnabled: Bool) -> CGFloat {
+        skin == .xiaoyu ? size * (glowEnabled ? 1.55 : 1.10) : size * 2
+    }
+
+    static func panelWidth(for skin: FloatingPetSkin, size: CGFloat, glowEnabled: Bool, showBubble: Bool) -> CGFloat {
+        if skin == .xiaoyu && !showBubble {
+            return size * (glowEnabled ? 1.55 : 0.95)
+        }
+        return size * 2
+    }
+
+    static func panelHeight(for skin: FloatingPetSkin, size: CGFloat, glowEnabled: Bool, showBubble: Bool) -> CGFloat {
+        petHeight(for: skin, size: size, glowEnabled: glowEnabled)
+            + (showBubble ? bubbleHeight + (skin == .xiaoyu ? tailGap : 0) : 0)
+    }
+
     var body: some View {
         let d = model.ballSize
         let showBubble = model.bubbleText != nil && settings.showStatusBubble
-        // 心情球绘制在 2d 容器中央；小雨精灵则在同一容器底部对齐。
-        // 气泡尾巴需要分别锚到两种皮肤的可见顶部，否则小雨会多出半个直径的空隙。
+        let panelWidth = Self.panelWidth(
+            for: settings.skin, size: d, glowEnabled: settings.glowEnabled, showBubble: showBubble
+        )
+        let petHeight = Self.petHeight(for: settings.skin, size: d, glowEnabled: settings.glowEnabled)
+        let bubbleSpace = Self.panelHeight(
+            for: settings.skin, size: d, glowEnabled: settings.glowEnabled, showBubble: showBubble
+        ) - petHeight
+        // 心情球保留完整光晕；小雨窗口只包含精灵、光晕和当前显示的气泡。
         let bubbleAnchorOffset = bubbleAnchor(for: d)
 
         ZStack(alignment: .top) {
@@ -60,26 +81,25 @@ struct MoodBallView: View {
                         .contentShape(Rectangle())
                 }
             }
-            .frame(width: d * 2.0, height: d * 2.0)
-            .offset(y: showBubble ? Self.bubbleHeight : 0)
+            .frame(width: panelWidth, height: petHeight)
+            .offset(y: bubbleSpace)
             .gesture(dragGesture)
 
             // —— 状态气泡层：仅动画自身显隐，不影响布局（面板高度由外层瞬时切换）——
             ZStack(alignment: .top) {
                 if showBubble, let text = model.bubbleText {
                     SpeechBubble(text: text, color: model.color)
-                        .offset(y: bubbleAnchorOffset - Self.tailGap)
+                        .offset(y: settings.skin == .xiaoyu ? 0 : bubbleAnchorOffset - Self.tailGap)
                         .transition(.scale(scale: 0.8, anchor: .bottom).combined(with: .opacity))
                 }
             }
             .animation(.easeInOut(duration: 0.15), value: showBubble)
             .allowsHitTesting(false)
         }
-        // 显式顶部对齐非常关键：面板为气泡向上增高时，默认居中会把宠物向下挤半个
-        // bubbleHeight。顶部对齐配合宠物的 bubbleHeight 偏移后，其屏幕底部保持不变。
+        // 顶部对齐使新增的气泡空间只向上延伸，宠物底部不动。
         .frame(
-            width: d * 2.0,
-            height: d * 2.0 + (showBubble ? Self.bubbleHeight : 0),
+            width: panelWidth,
+            height: petHeight + bubbleSpace,
             alignment: .top
         )
     }

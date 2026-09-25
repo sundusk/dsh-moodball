@@ -17,9 +17,7 @@ struct SettingsPanelView: View {
         VStack(spacing: 0) {
             // 顶部实时预览（跟随当前设置的渲染）
             PreviewBall(settings: settings)
-                // XiaoyuSpriteView 包含约 2 倍宠物尺寸的透明命中区域；
-                // 预览区固定高度时必须底部对齐，否则透明区域会把可见宠物
-                // 推到分段按钮上方。裁剪也保证未来更大的光晕不会越界。
+                // 预览区固定高度，底部对齐宠物并裁剪超出的光晕。
                 .frame(height: 150, alignment: .bottom)
                 .clipped()
                 .frame(maxWidth: .infinity)

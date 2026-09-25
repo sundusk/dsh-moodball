@@ -198,9 +198,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - 悬浮窗
 
     private func setupPanel() {
-        let size = SettingsStore.shared.ballSize * 2.0
+        let width = MoodBallView.panelWidth(
+            for: SettingsStore.shared.skin,
+            size: SettingsStore.shared.ballSize,
+            glowEnabled: SettingsStore.shared.glowEnabled,
+            showBubble: showStatusBubble
+        )
+        let height = MoodBallView.panelHeight(
+            for: SettingsStore.shared.skin,
+            size: SettingsStore.shared.ballSize,
+            glowEnabled: SettingsStore.shared.glowEnabled,
+            showBubble: showStatusBubble
+        )
         let panel = MoodBallPanel(
-            contentRect: NSRect(x: 0, y: 0, width: size, height: size),
+            contentRect: NSRect(x: 0, y: 0, width: width, height: height),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -352,15 +363,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - 设置联动
 
     private func observeSettings() {
-        // 球大小变化 → 保持球心不动地调整窗口尺寸（含气泡增高）
-        settingsSink = SettingsStore.shared.$ballSize
+        // 皮肤、尺寸或光晕变化时更新窗口；底部锚点保持不动。
+        settingsSink = Publishers.CombineLatest3(
+            SettingsStore.shared.$ballSize,
+            SettingsStore.shared.$skin,
+            SettingsStore.shared.$glowEnabled
+        )
             .receive(on: RunLoop.main)
-            .sink { [weak self] newSize in
+            .sink { [weak self] newSize, skin, glowEnabled in
                 guard let self, let panel = self.panel else { return }
                 let showBubble = self.showStatusBubble
-                panel.setFrame(self.panelFrame(ballSize: newSize, showBubble: showBubble), display: true)
+                panel.setFrame(self.panelFrame(
+                    ballSize: newSize, skin: skin, glowEnabled: glowEnabled, showBubble: showBubble
+                ), display: true)
                 self.updateComposerPanel()
-                appLog.info("ballSize changed -> \(Int(newSize))")
+                self.updateHover()
             }
     }
 
@@ -371,14 +388,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.bubbleText != nil && SettingsStore.shared.showStatusBubble
     }
 
-    /// 依据球大小与气泡显隐计算面板 frame：保持球心（水平中心、距底边 = 球径）屏幕位置不变。
-    private func panelFrame(ballSize d: CGFloat, showBubble: Bool) -> NSRect {
-        let w = d * 2.0
-        let h = d * 2.0 + (showBubble ? MoodBallView.bubbleHeight : 0)
+    /// 按可见内容计算面板大小，保留宠物的水平中心和底部位置。
+    private func panelFrame(
+        ballSize d: CGFloat, skin: FloatingPetSkin, glowEnabled: Bool, showBubble: Bool
+    ) -> NSRect {
+        let w = MoodBallView.panelWidth(for: skin, size: d, glowEnabled: glowEnabled, showBubble: showBubble)
+        let h = MoodBallView.panelHeight(for: skin, size: d, glowEnabled: glowEnabled, showBubble: showBubble)
         let old = panel?.frame ?? NSRect(x: 0, y: 0, width: w, height: h)
         let ballCenterX = old.midX
-        let ballCenterY = old.minY + old.width / 2 // 球心距底边 = 旧球径
-        return NSRect(x: ballCenterX - w / 2, y: ballCenterY - d, width: w, height: h)
+        return NSRect(x: ballCenterX - w / 2, y: old.minY, width: w, height: h)
     }
 
     private func observeBubble() {
@@ -394,7 +412,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { [weak self] _ in
                 guard let self, let panel = self.panel else { return }
                 let showBubble = self.showStatusBubble
-                let frame = self.panelFrame(ballSize: SettingsStore.shared.ballSize, showBubble: showBubble)
+                let frame = self.panelFrame(
+                    ballSize: SettingsStore.shared.ballSize,
+                    skin: SettingsStore.shared.skin,
+                    glowEnabled: SettingsStore.shared.glowEnabled,
+                    showBubble: showBubble
+                )
                 if !frame.equalTo(panel.frame) {
                     panel.setFrame(frame, display: true)
                     appLog.info("panel frame -> \(Int(frame.width))x\(Int(frame.height)) bubble=\(showBubble)")
@@ -431,35 +454,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard panel?.isVisible == true || (isMini && composerPanel?.isVisible == true) else { return }
         let mouse = NSEvent.mouseLocation
         let d = settings.ballSize
-        let insideBall: Bool
+        let petFrame: NSRect?
         if let panel, panel.isVisible {
-            let ballCenter = NSPoint(x: panel.frame.midX, y: panel.frame.minY + d)
-            insideBall = hypot(mouse.x - ballCenter.x, mouse.y - ballCenter.y) <= d
+            if settings.skin == .xiaoyu {
+                // The atlas's opaque pixels span at most 149 of 208 pixels, including drag frames.
+                let petWidth = d * 0.75
+                petFrame = NSRect(
+                    x: panel.frame.midX - petWidth / 2,
+                    y: panel.frame.minY,
+                    width: petWidth,
+                    height: d * 1.10
+                )
+            } else {
+                petFrame = NSRect(x: panel.frame.midX - d, y: panel.frame.minY + d / 2, width: d * 2, height: d)
+            }
         } else {
-            insideBall = false
+            petFrame = nil
+        }
+        let insidePet: Bool
+        if settings.skin == .xiaoyu {
+            insidePet = petFrame?.insetBy(dx: -8, dy: -4).contains(mouse) == true
+        } else if let panel, panel.isVisible {
+            let ballCenter = NSPoint(x: panel.frame.midX, y: panel.frame.minY + d)
+            insidePet = hypot(mouse.x - ballCenter.x, mouse.y - ballCenter.y) <= d
+        } else {
+            insidePet = false
         }
 
         if settings.clickThroughMode != .always,
-           model.barPhase != .composer {
+            model.barPhase != .composer {
             let controlFrame = composerPanel?.frame.insetBy(dx: -14, dy: -18)
-            let bridgeFrame: NSRect?
-            if let panel, panel.isVisible {
-                let minX = min(panel.frame.minX, composerPanel?.frame.minX ?? panel.frame.minX) - 14
-                let minY = min(panel.frame.minY, composerPanel?.frame.minY ?? panel.frame.minY) - 18
-                bridgeFrame = NSRect(
-                    x: minX,
-                    y: minY,
-                    width: max(panel.frame.maxX, composerPanel?.frame.maxX ?? panel.frame.maxX) - minX + 14,
-                    height: max(panel.frame.maxY, composerPanel?.frame.maxY ?? panel.frame.maxY) - minY + 18
-                )
-            } else {
-                bridgeFrame = nil
-            }
             let insideTaskPanel = taskPanel?.isVisible == true && taskPanel?.frame.contains(mouse) == true
             model.setComposerHovering(
-                insideBall
+                insidePet
                     || controlFrame?.contains(mouse) == true
-                    || bridgeFrame?.contains(mouse) == true
                     || insideTaskPanel
             )
         }
@@ -474,9 +502,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // 永不穿透：常驻响应（无穿透）
             if panel.ignoresMouseEvents { panel.ignoresMouseEvents = false }
         case .hover:
-            // 悬停恢复：鼠标在球体圆形区域（球心距底边 = 球径）内时响应（可拖拽），否则穿透。
-            // 面板在气泡出现时会向上增高，因此命中判定收窄到球体圆形，气泡区域保持点击穿透。
-            let shouldIgnore = !panel.isDragging && !insideBall
+            // 气泡和透明光晕不参与宠物拖拽命中。
+            let shouldIgnore = !panel.isDragging && !insidePet
             if panel.ignoresMouseEvents != shouldIgnore {
                 panel.ignoresMouseEvents = shouldIgnore
                 appLog.info("hover -> ignoresMouseEvents=\(shouldIgnore)")

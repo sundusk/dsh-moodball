@@ -300,10 +300,11 @@ struct XiaoyuSpriteView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            // The surrounding hit area remains generous, but the visible pet
-            // is bottom-anchored so the control surface can sit directly below
-            // its feet, matching the reference interaction layout.
-            .frame(width: size * 2, height: size * 2, alignment: .bottom)
+            .frame(
+                width: size * (glowEnabled ? 1.55 : 0.95),
+                height: size * (glowEnabled ? 1.55 : 1.10),
+                alignment: .bottom
+            )
         }
         .onChange(of: mood) {
             stateStartedAt = Date()
