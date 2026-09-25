@@ -154,11 +154,6 @@ private struct AppearanceTab: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Toggle("显示全部（桌宠＋控件）", isOn: Binding(
-                get: { settings.isBallVisible },
-                set: { settings.isBallVisible = $0 }
-            ))
-
             LabeledContent("桌宠大小") {
                 HStack {
                     Slider(value: Binding(

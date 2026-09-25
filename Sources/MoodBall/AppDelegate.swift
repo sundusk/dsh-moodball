@@ -137,7 +137,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var statusSink: AnyCancellable?
     private var statusHeaderItem: NSMenuItem?
-    private var toggleMenuItem: NSMenuItem?
     private var togglePetMenuItem: NSMenuItem?
     private var shortcutMenuItems: [MoodBallShortcutAction: [NSMenuItem]] = [:]
     private var lastIconColor: Color?
@@ -281,7 +280,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             positionAtBottomRight(panel)
         }
         MoodBallPanel.current = panel
-        if SettingsStore.shared.isBallVisible,
+        if SettingsStore.shared.isPetVisible,
            SettingsStore.shared.displayMode == .petAndControls {
             panel.orderFrontRegardless()
         }
@@ -305,7 +304,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         context.isExcludedFromWindowsMenu = true
         context.contentView = NSHostingView(rootView: PetContextView { [weak self] in
             self?.dismissPetContext()
-            SettingsStore.shared.isBallVisible = false
+            SettingsStore.shared.isPetVisible = false
         })
         petContextPanel = context
     }
@@ -659,7 +658,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateComposerPanel() {
         guard let composerPanel else { return }
         let settings = SettingsStore.shared
-        guard settings.isBallVisible else {
+        guard settings.isPetVisible else {
             composerPanel.orderOut(nil)
             model.closeTaskPanel()
             return
@@ -706,7 +705,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateTaskPanel() {
         guard let taskPanel else { return }
-        let shouldShow = SettingsStore.shared.isBallVisible
+        let shouldShow = SettingsStore.shared.isPetVisible
             && model.taskPanelMode != .closed
         guard shouldShow else {
             removeTaskPanelEventMonitors()
@@ -741,7 +740,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Task { @MainActor in
                     guard let self, let taskPanel else { return }
                     self.isTaskPanelClosing = false
-                    if self.model.taskPanelMode == .closed || !SettingsStore.shared.isBallVisible {
+                    if self.model.taskPanelMode == .closed || !SettingsStore.shared.isPetVisible {
                         taskPanel.orderOut(nil)
                     }
                     taskPanel.alphaValue = 1
@@ -902,11 +901,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return NSRect(x: x, y: y, width: frame.width, height: frame.height)
     }
 
-    // MARK: - 菜单栏动作（通过 model.isBallVisible 驱动，避免依赖 NSApp.delegate 类型）
+    // MARK: - 宠物显示状态
 
     private func observeVisibility() {
         visibilitySink = Publishers.CombineLatest(
-            SettingsStore.shared.$isBallVisible,
+            SettingsStore.shared.$isPetVisible,
             SettingsStore.shared.$displayMode
         )
             .receive(on: RunLoop.main)
@@ -947,16 +946,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
-        toggleMenuItem = makeShortcutMenuItem(
-            action: .toggleBallVisibility,
-            title: model.isBallVisible ? "隐藏全部" : "显示全部",
-            selector: #selector(toggleBallVisibility)
-        )
-        menu.addItem(toggleMenuItem!)
-
         togglePetMenuItem = makeShortcutMenuItem(
             action: .togglePetVisibility,
-            title: isMiniMode ? "显示桌宠形象" : "隐藏桌宠形象",
+            title: SettingsStore.shared.isPetVisible ? "隐藏宠物" : "显示宠物",
             selector: #selector(togglePetVisibility)
         )
         menu.addItem(togglePetMenuItem!)
@@ -1030,8 +1022,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.button?.toolTip = model.statusText
         item.button?.setAccessibilityLabel(model.statusText)
         statusHeaderItem?.title = model.statusText
-        toggleMenuItem?.title = model.isBallVisible ? "隐藏全部" : "显示全部"
-        togglePetMenuItem?.title = isMiniMode ? "显示桌宠形象" : "隐藏桌宠形象"
+        togglePetMenuItem?.title = SettingsStore.shared.isPetVisible ? "隐藏宠物" : "显示宠物"
         applyMenuShortcuts()
     }
 
@@ -1061,12 +1052,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc private func toggleBallVisibility() {
-        model.isBallVisible.toggle()
-    }
-
     @objc private func togglePetVisibility() {
-        SettingsStore.shared.displayMode = isMiniMode ? .petAndControls : .controlsOnly
+        SettingsStore.shared.isPetVisible.toggle()
     }
 
     // MARK: - 全局快捷键
@@ -1101,10 +1088,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showComposerFromGlobalHotKey() {
-        // The shortcut remains useful after the user hides everything: reveal
-        // the control surface, while respecting Mini mode's hidden pet.
-        if !SettingsStore.shared.isBallVisible {
-            SettingsStore.shared.isBallVisible = true
+        // Show the selected display mode before focusing its composer.
+        if !SettingsStore.shared.isPetVisible {
+            SettingsStore.shared.isPetVisible = true
         }
         model.openComposer(focus: true)
         NSApp.activate(ignoringOtherApps: true)

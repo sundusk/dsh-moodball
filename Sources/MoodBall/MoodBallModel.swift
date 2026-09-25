@@ -79,11 +79,6 @@ final class MoodBallModel: ObservableObject {
         }
     }
 
-    var isBallVisible: Bool {
-        get { SettingsStore.shared.isBallVisible }
-        set { SettingsStore.shared.isBallVisible = newValue }
-    }
-
     @Published private(set) var wiggleTriggeredAt: Date?
 
     private let bridge: MoodBridge

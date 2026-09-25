@@ -58,7 +58,6 @@ enum MoodBallShortcutAction: String, CaseIterable, Identifiable, Hashable {
     case newSession
     case selectWorkspace
     case openHarness
-    case toggleBallVisibility
     case togglePetVisibility
     case openSettings
     case statePreview
@@ -71,8 +70,7 @@ enum MoodBallShortcutAction: String, CaseIterable, Identifiable, Hashable {
         case .newSession: return "新建会话"
         case .selectWorkspace: return "选择工作区"
         case .openHarness: return "打开 Harness"
-        case .toggleBallVisibility: return "显示 / 隐藏全部"
-        case .togglePetVisibility: return "显示 / 隐藏桌宠"
+        case .togglePetVisibility: return "显示 / 隐藏宠物"
         case .openSettings: return "打开设置"
         case .statePreview: return "状态展示"
         }
@@ -88,8 +86,6 @@ enum MoodBallShortcutAction: String, CaseIterable, Identifiable, Hashable {
             return GlobalHotKeyConfiguration(isEnabled: true, keyCode: 31, modifiers: [.command]) // ⌘O
         case .openHarness:
             return GlobalHotKeyConfiguration(isEnabled: true, keyCode: 31, modifiers: [.command, .shift]) // ⌘⇧O
-        case .toggleBallVisibility:
-            return GlobalHotKeyConfiguration(isEnabled: true, keyCode: 9, modifiers: [.command, .shift]) // ⌘⇧V
         case .togglePetVisibility:
             return GlobalHotKeyConfiguration(isEnabled: true, keyCode: 35, modifiers: [.command, .shift]) // ⌘⇧P
         case .openSettings:
@@ -170,7 +166,7 @@ final class PetSettings: ObservableObject {
         static let showStatusBubble = "moodball.showStatusBubble"
         static let glowEnabled = "moodball.glowEnabled"
         static let lockPosition = "moodball.lockPosition"
-        static let isBallVisible = "moodball.isBallVisible"
+        static let isPetVisible = "moodball.isPetVisible"
         static let positionX = "moodball.ballPositionX"
         static let positionY = "moodball.ballPositionY"
         static let miniPositionX = "moodball.miniPositionX"
@@ -183,6 +179,7 @@ final class PetSettings: ObservableObject {
     }
 
     private enum LegacyKey {
+        static let isBallVisible = "moodball.isBallVisible"
         static let ballSize = "settings.ballSize"
         static let breathingSpeed = "settings.breathingSpeed"
         static let apiBase = "settings.apiBase"
@@ -224,8 +221,8 @@ final class PetSettings: ObservableObject {
         didSet { defaults.set(glowEnabled, forKey: Key.glowEnabled) }
     }
 
-    @Published var isBallVisible: Bool {
-        didSet { defaults.set(isBallVisible, forKey: Key.isBallVisible) }
+    @Published var isPetVisible: Bool {
+        didSet { defaults.set(isPetVisible, forKey: Key.isPetVisible) }
     }
 
     @Published var lockPosition: Bool {
@@ -428,7 +425,7 @@ final class PetSettings: ObservableObject {
         showStatusBubble = Self.bool(defaults, for: Key.showStatusBubble, legacy: LegacyKey.showStatusBubble) ?? true
         glowEnabled = Self.bool(defaults, for: Key.glowEnabled, legacy: LegacyKey.glowEnabled) ?? true
         lockPosition = Self.bool(defaults, for: Key.lockPosition, legacy: LegacyKey.lockPosition) ?? false
-        isBallVisible = defaults.object(forKey: Key.isBallVisible) == nil ? true : defaults.bool(forKey: Key.isBallVisible)
+        isPetVisible = Self.bool(defaults, for: Key.isPetVisible, legacy: LegacyKey.isBallVisible) ?? true
         disconnectedColor = Color(hex: Self.hex(defaults, for: Key.moodColorPrefix + "disconnected", legacy: LegacyKey.moodColorPrefix + "disconnected") ?? disconnectedHex)
 
         var colors: [String: Color] = [:]
