@@ -5,7 +5,7 @@
 # 安装层会绑定到用户实际使用的 Harness：
 #   - Source：在 sourceRoot 内执行 pnpm dsh
 #   - NPM/NPX：执行 dsh 或 npx @deepseek-ai/dsh
-#   - Desktop：第一阶段只检测，不把插件误装到 web profile
+#   - Desktop：检测并提示在桌面版插件页面安装，不调用公开 CLI 修改保留的 desktop profile
 #
 # 运行架构不变：DeepSeek Harness → dsh-moodball-status → HTTP / Unix Socket → MoodBall.app
 # =============================================================================
@@ -304,6 +304,22 @@ detect_desktop() {
     return 1
 }
 
+detect_running_desktop() {
+    local pid command
+    while read -r pid command; do
+        case "$command" in
+            *"dsh-desktop-host/lib/index.js"*|*"dsh-desktop-host/src/index.ts"*)
+                HARNESS_TYPE="desktop"
+                HARNESS_PID="$pid"
+                HARNESS_RUNNING=1
+                HARNESS_DISPLAY="DeepSeek Harness Desktop（运行中）"
+                return 0
+                ;;
+        esac
+    done < <(ps -axo pid=,command= 2>/dev/null || true)
+    return 1
+}
+
 find_npm_harness() {
     HARNESS_DSH_BIN=$(find_dsh_bin || true)
     if [ -n "$HARNESS_DSH_BIN" ]; then
@@ -356,7 +372,22 @@ choose_source_candidate() {
 select_harness() {
     local env_source saved_source saved_type saved_home
 
-    # 1. 当前正在运行的 Harness。
+    # 1. 用户显式指定的源码目录优先。
+    env_source="${DSH_SOURCE_ROOT:-}"
+    if [ -n "$env_source" ] && source_is_valid "$env_source"; then
+        HARNESS_TYPE="source"
+        HARNESS_CLI_KIND="source"
+        HARNESS_SOURCE_ROOT="$(normalize_path "$env_source")"
+        HARNESS_DISPLAY="DeepSeek Harness 源码版（${HARNESS_SOURCE_ROOT}）"
+        return 0
+    fi
+
+    # 2. 桌面 Host 使用独立的 desktop profile，不能用 CLI 的 web profile 代替。
+    if detect_running_desktop; then
+        return 0
+    fi
+
+    # 3. 当前正在运行的 CLI Harness。
     if detect_running_harness; then
         if [ "$HARNESS_TYPE" = "source" ]; then
             HARNESS_CLI_KIND="source"
@@ -370,21 +401,11 @@ select_harness() {
         return 0
     fi
 
-    # 2. 环境变量指定的源码根目录。
-    env_source="${DSH_SOURCE_ROOT:-}"
-    if [ -n "$env_source" ] && source_is_valid "$env_source"; then
-        HARNESS_TYPE="source"
-        HARNESS_CLI_KIND="source"
-        HARNESS_SOURCE_ROOT="$(normalize_path "$env_source")"
-        HARNESS_DISPLAY="DeepSeek Harness 源码版（${HARNESS_SOURCE_ROOT}）"
-        return 0
-    fi
-
     SAVED_TYPE=$(config_field type || true)
     SAVED_SOURCE_ROOT=$(config_field sourceRoot || true)
     SAVED_DSH_HOME=$(config_field dshHome || true)
 
-    # 3. 最近明确配置的 Harness。
+    # 4. 最近明确配置的 Harness。
     if [ "$SAVED_TYPE" = "source" ] && source_is_valid "$SAVED_SOURCE_ROOT"; then
         HARNESS_TYPE="source"
         HARNESS_CLI_KIND="source"
@@ -399,7 +420,14 @@ select_harness() {
         return 0
     fi
 
-    # 4. 有限搜索 Source；Source 优先于 NPM，但多个仓库必须选择。
+    # 5. 已安装的 Desktop 优先于未明确选定的源码 checkout。
+    if detect_desktop; then
+        HARNESS_TYPE="desktop"
+        HARNESS_DISPLAY="DeepSeek Harness Desktop"
+        return 0
+    fi
+
+    # 6. 有限搜索 Source；Source 优先于 NPM，但多个仓库必须选择。
     for env_source in "$HOME/Projects" "$HOME/Developer" "$HOME/Documents" "$HOME/Desktop"; do
         [ -d "$env_source" ] && scan_source_dir "$env_source" 0
     done
@@ -410,15 +438,8 @@ select_harness() {
         return 0
     fi
 
-    # 5. 没有 Source 目标时才选择 NPM/NPX。
+    # 7. 没有 Source 目标时才选择 NPM/NPX。
     if find_npm_harness; then
-        return 0
-    fi
-
-    # 6. Desktop 只检测，不把插件装到 web profile 冒充支持。
-    if detect_desktop; then
-        HARNESS_TYPE="desktop"
-        HARNESS_DISPLAY="DeepSeek Harness Desktop"
         return 0
     fi
 
@@ -478,8 +499,16 @@ plugin_is_installed() {
 
 socket_is_active() {
     [ -S "$SOCKET_PATH" ] || return 1
+    if [ "$HARNESS_TYPE" = "desktop" ]; then
+        # A CLI Web process may own the same path. Attribute it to Desktop only
+        # when the currently selected Desktop Host has the listening socket.
+        [ "$HARNESS_RUNNING" -eq 1 ] && [ -n "$HARNESS_PID" ] || return 1
+        command -v lsof >/dev/null 2>&1 || return 1
+        lsof -a -p "$HARNESS_PID" -U -Fn 2>/dev/null | grep -Fx "n$SOCKET_PATH" >/dev/null || return 1
+    fi
     if command -v nc >/dev/null 2>&1; then
-        nc -z -w 1 -U "$SOCKET_PATH" >/dev/null 2>&1 && return 0
+        # macOS nc -z -U can report failure for a reachable Unix stream.
+        nc -w 1 -U "$SOCKET_PATH" </dev/null >/dev/null 2>&1 && return 0
         return 1
     fi
     # macOS 的标准工具集可能没有 nc -U；套接字存在仍是有用的 active 信号。
@@ -487,6 +516,7 @@ socket_is_active() {
 }
 
 status_is_active() {
+    [ "$HARNESS_TYPE" != "desktop" ] || return 1
     curl -fsS -m 2 "$STATUS_URL" >/dev/null 2>&1
 }
 
@@ -602,7 +632,7 @@ if select_harness; then
         VERSION=$(harness_cli_version)
         [ -n "$VERSION" ] && ok "Harness 版本：$VERSION"
     elif [ "$HARNESS_TYPE" = "desktop" ]; then
-        warn "检测到官方 Desktop；第一阶段不支持自动安装 Desktop 插件。"
+        info "请在桌面版「插件」页面安装并启用 $PLUGIN_SPEC；公开 CLI 不能管理 desktop profile。"
     fi
 else
     warn "未检测到可绑定的 DeepSeek Harness；仍会安装 MoodBall.app。"
@@ -758,7 +788,8 @@ case "$PLUGIN_STATE" in
     unknown)
         echo "  ⚠ 暂时无法确认状态插件是否已连接。"
         if [ "$HARNESS_TYPE" = "desktop" ]; then
-            echo "    Desktop 插件自动安装尚未支持，未向 web profile 写入插件。"
+            echo "    请在桌面版「插件」页面确认 $PLUGIN_NAME 已安装并启用。"
+            echo "    安装或启用后重启桌面版 Host，MoodBall 会自动重连。"
         else
             echo "    MoodBall 会先显示未连接状态；请检查目标 Harness 和插件安装结果。"
         fi
@@ -766,7 +797,8 @@ case "$PLUGIN_STATE" in
 esac
 echo "  ✓ MoodBall.app 已安装并已尝试启动：$APP_DEST"
 echo ""
-echo "  说明：安装器只操作选定 Harness 的 web profile，不会停止、重启或修改 Harness Session。"
+echo "  说明：CLI 安装仅操作选定 Harness 的 web profile；Desktop 插件由桌面版管理。"
+echo "        安装器不会停止、重启或修改 Harness Session。"
 echo "══════════════════════════════════════════════════════════════"
 
 if [ "$PLUGIN_INSTALL_FAILED" -eq 1 ]; then

@@ -47,8 +47,8 @@
 ### 安装依赖
 
 1. **macOS 14+**
-2. **DeepSeek Harness**：支持 NPM/NPX 版和官方源码版，安装方法见 [官方文档](https://github.com/deepseek-ai/deepseek-harness)
-3. **Node.js + pnpm**：NPM/NPX 版需要 Node.js；源码版需要在源码根目录可运行 `pnpm dsh`
+2. **DeepSeek Harness**：支持桌面版、NPM/NPX 版和官方源码版，安装方法见 [官方文档](https://github.com/deepseek-ai/deepseek-harness)
+3. **CLI 版依赖**：NPM/NPX 版需要 Node.js；源码版需要在源码根目录可运行 `pnpm dsh`
 
 ### 方式一：一键安装（推荐）
 
@@ -58,9 +58,9 @@ curl -fsSL https://github.com/sundusk/dsh-moodball/raw/refs/heads/main/install.s
 
 脚本会自动：
 
-1. 检测当前正在运行的 Harness，并识别 NPM/NPX 或源码版
+1. 检测当前正在运行的 Harness，并识别桌面版、NPM/NPX 版或源码版
 2. 源码版在实际源码根目录执行 `pnpm dsh`；NPM/NPX 版执行对应的 `dsh` 或 `npx` CLI
-3. 在目标 Harness 的 `web` profile 中检测/安装状态插件
+3. CLI 版在目标 Harness 的 `web` profile 中检测/安装状态插件；桌面版通过应用内「插件」页面安装
 4. 从 GitHub latest release 下载 `MoodBall.app`（本地存在 `dist/MoodBall.app` 时优先使用）
 5. 优先安装到 `/Applications`，无权限时自动回退到 `~/Applications` 并启动；安装后只保留这一个 MoodBall.app，另一安装目录和本地 `dist` 副本会移入废纸篓
 
@@ -80,7 +80,7 @@ DSH_SOURCE_ROOT="$HOME/Projects/deepseek-harness" bash install.sh
 安装器会复用当前环境或已识别 Harness 的 `DSH_HOME`，并将最近使用的 Harness 类型、源码路径和 profile
 记录在 `~/Library/Application Support/MoodBall/config.json`，供下一次安装使用。
 
-官方 Desktop 在第一阶段只做检测，不会偷偷把插件安装到 `web` profile；需要等待 Desktop 官方插件安装机制稳定后再支持自动安装。
+桌面版使用独立的 `desktop` profile。请在桌面版「插件」页面安装并启用 `github:sundusk/dsh-moodball`，再重启桌面版让插件加载。公开 `dsh plugin` CLI 不能管理桌面版 profile；安装器检测到桌面版时不会把插件误装到 `web` profile。MoodBall 使用本地 Socket 接收桌面版状态；桌面版晚启动或重启后会自动重连。
 
 ### 方式二：仓库安装
 
@@ -192,7 +192,7 @@ bash install.sh
 
 ### 状态桥接与设置面板
 
-插件会优先向 `~/Library/Application Support/MoodBall/moodball.sock` 推送换行分隔的状态 JSON；本地桥接不可用时，app 自动回退到设置中的 HTTP 地址 `/api/moodball/status`。
+插件会优先向 `~/Library/Application Support/MoodBall/moodball.sock` 推送换行分隔的状态 JSON；本地桥接不可用时，app 自动回退到设置中的 HTTP 地址 `/api/moodball/status`，并继续尝试本地 Socket。桌面版的 Host 默认端口与 CLI Web 版不同，使用桌面版时以本地 Socket 为准。
 MoodBall 的状态 Socket 只读；输入功能由独立的用户级命令 Socket 转发到官方 `workspaceRegistry` / `sessionController`。MoodBall 不会启动、停止、升级或修改 Harness，也不模拟 Web UI。
 
 菜单栏 →「设置…」可调整：球大小、呼吸速度、8 种状态颜色、眼睛开关与颜色、
@@ -214,8 +214,7 @@ bash uninstall.sh
 
 ### 常见问题
 
-- **球是灰色的？** 说明 DSH 未运行（显示「DSH 未运行」）或状态插件未装（显示「插件已关闭」）。
-  先确认终端里 `dsh web` 在跑，再确认插件已安装并启用。
+- **球是灰色的？** 先确认目标 Harness 正在运行、状态插件已安装并启用。CLI 版检查 `dsh web` 与 `web` profile；桌面版检查应用内「插件」页面与 `desktop` profile，插件刚安装后需重启桌面版。
 - **「设置 → 插件」里怎么没有心情球插件卡片？** 这是正常的——心情球插件没有任何设置项
   （所有配置都在 app 的设置面板里），所以不显示配置卡片。可在「设置 → 插件 → **插件列表**」
   中查看它（状态为「已挂载」）。

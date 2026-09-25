@@ -2,8 +2,7 @@ import Foundation
 import Combine
 
 /// Coordinates the local-first transport policy and exposes one stable stream
-/// to the pet model. The fallback is deliberately one-way for a run: a local
-/// socket that becomes available on the next app launch is picked up then.
+/// to the pet model. The local socket keeps retrying while HTTP is the fallback.
 @MainActor
 final class MoodBridge: ObservableObject {
     @Published private(set) var snapshot = MoodBridgeSnapshot.disconnected
@@ -62,11 +61,13 @@ final class MoodBridge: ObservableObject {
     private func wire(_ transport: any HarnessStateTransport, kind: TransportKind) {
         transport.onStateChanged = { [weak self] snapshot in
             guard let self else { return }
+            if kind == .http && self.local.isConnected { return }
             self.snapshot = snapshot
             self.transportKind = kind
         }
         transport.onConnectionChanged = { [weak self] status in
             guard let self else { return }
+            if kind == .http && self.local.isConnected { return }
             self.connection = status
             if status == .connected {
                 self.transportKind = kind

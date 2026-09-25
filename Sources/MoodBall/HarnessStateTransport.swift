@@ -115,6 +115,8 @@ final class LocalSocketTransport: HarnessStateTransport {
     private let socketPath: String
     private let queue = DispatchQueue(label: "com.sundusk.moodball.local-transport")
     private var connection: NWConnection?
+    private var retryTask: Task<Void, Never>?
+    private var shouldReconnect = false
     private var buffer = Data()
 
     init(socketPath: String = LocalSocketTransport.defaultSocketPath) {
@@ -127,21 +129,27 @@ final class LocalSocketTransport: HarnessStateTransport {
     }
 
     func connect() {
+        shouldReconnect = true
+        retryTask?.cancel()
+        retryTask = nil
+        openConnection()
+    }
+
+    private func openConnection() {
         guard connection == nil else { return }
         buffer.removeAll(keepingCapacity: true)
         let connection = NWConnection(to: .unix(path: socketPath), using: .tcp)
         self.connection = connection
         connection.stateUpdateHandler = { [weak self] state in
             Task { @MainActor [weak self] in
-                guard let self else { return }
+                guard let self, self.connection === connection else { return }
                 switch state {
                 case .ready:
                     self.isConnected = true
                     self.onConnectionChanged?(.connected)
-                    self.receiveNext()
-                case .failed, .cancelled:
-                    self.isConnected = false
-                    self.onConnectionChanged?(.unavailable)
+                    self.receiveNext(connection)
+                case .waiting, .failed, .cancelled:
+                    self.connectionEnded(connection)
                 default:
                     break
                 }
@@ -151,23 +159,42 @@ final class LocalSocketTransport: HarnessStateTransport {
     }
 
     func disconnect() {
-        connection?.cancel()
+        shouldReconnect = false
+        retryTask?.cancel()
+        retryTask = nil
+        let previous = connection
         connection = nil
+        previous?.cancel()
         buffer.removeAll(keepingCapacity: false)
         isConnected = false
     }
 
-    private func receiveNext() {
-        guard let connection else { return }
+    private func connectionEnded(_ ended: NWConnection) {
+        guard connection === ended else { return }
+        connection = nil
+        ended.cancel()
+        buffer.removeAll(keepingCapacity: false)
+        isConnected = false
+        onConnectionChanged?(.unavailable)
+        guard shouldReconnect else { return }
+        retryTask?.cancel()
+        retryTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            guard let self, !Task.isCancelled, self.shouldReconnect else { return }
+            self.retryTask = nil
+            self.openConnection()
+        }
+    }
+
+    private func receiveNext(_ connection: NWConnection) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] data, _, isComplete, _ in
             Task { @MainActor [weak self] in
-                guard let self else { return }
+                guard let self, self.connection === connection else { return }
                 if let data { self.consume(data) }
                 if isComplete {
-                    self.isConnected = false
-                    self.onConnectionChanged?(.unavailable)
-                } else if self.connection != nil {
-                    self.receiveNext()
+                    self.connectionEnded(connection)
+                } else {
+                    self.receiveNext(connection)
                 }
             }
         }
