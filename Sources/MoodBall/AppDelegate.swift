@@ -15,6 +15,7 @@ final class MoodBallPanel: NSPanel {
 
     /// 拖拽进行中（悬停检测据此保持响应，避免拖到一半变成点击穿透）
     var isDragging = false
+    var onRightClick: ((NSPoint) -> Void)?
 
     private enum PositionKeys {
         static let x = "moodball.ballPositionX"
@@ -26,6 +27,10 @@ final class MoodBallPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
     override var acceptsFirstResponder: Bool { true }
+
+    override func rightMouseDown(with event: NSEvent) {
+        onRightClick?(NSEvent.mouseLocation)
+    }
 
     /// 尝试恢复上次拖拽保存的位置；仅当设置允许且窗口中心仍在某个屏幕可视区内才生效
     @discardableResult
@@ -82,12 +87,42 @@ final class MoodBallTaskPanel: NSPanel {
     }
 }
 
+private final class PetContextPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+}
+
+private struct PetContextView: View {
+    let hidePet: () -> Void
+
+    var body: some View {
+        Button(action: hidePet) {
+            Text("隐藏宠物")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.white)
+                .frame(width: 88, height: 32)
+                .background(Color(nsColor: NSColor(calibratedWhite: 0.42, alpha: 0.76)),
+                            in: RoundedRectangle(cornerRadius: 12))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(.white.opacity(0.35), lineWidth: 0.7)
+                }
+                .shadow(color: .black.opacity(0.2), radius: 7, y: 3)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("隐藏宠物")
+        .frame(width: 104, height: 48)
+    }
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = MoodBallModel.shared
     private var panel: MoodBallPanel?
     private var composerPanel: MoodBallComposerPanel?
     private var taskPanel: MoodBallTaskPanel?
+    private var petContextPanel: PetContextPanel?
+    private var petContextMonitors: [Any] = []
     private var settingsPanel: NSPanel?
     private var statePreviewPanel: NSPanel?
     private var hoverMonitors: [Any] = []
@@ -127,6 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupMainMenu()
 
         setupPanel()
+        setupPetContextPanel()
         setupComposerPanel()
         setupTaskPanel()
         setupGlobalHotKey()
@@ -187,6 +223,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
         resignObserver = nil
         removeTaskPanelEventMonitors()
+        dismissPetContext()
         model.closeTaskPanel()
     }
 
@@ -226,6 +263,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .none
         panel.isExcludedFromWindowsMenu = true
+        panel.onRightClick = { [weak self] point in
+            self?.showPetContext(at: point)
+        }
 
         let hosting = NSHostingView(rootView: MoodBallView(model: model, settings: SettingsStore.shared))
         hosting.wantsLayer = true
@@ -242,6 +282,72 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             panel.orderFrontRegardless()
         }
         self.panel = panel
+    }
+
+    private func setupPetContextPanel() {
+        let context = PetContextPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 104, height: 48),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        context.isOpaque = false
+        context.backgroundColor = .clear
+        context.hasShadow = false
+        context.level = .floating
+        context.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        context.isReleasedWhenClosed = false
+        context.hidesOnDeactivate = false
+        context.isExcludedFromWindowsMenu = true
+        context.contentView = NSHostingView(rootView: PetContextView { [weak self] in
+            self?.dismissPetContext()
+            SettingsStore.shared.displayMode = .controlsOnly
+        })
+        petContextPanel = context
+    }
+
+    private func showPetContext(at point: NSPoint) {
+        guard let context = petContextPanel else { return }
+        let visible = NSScreen.screens.first(where: { $0.frame.contains(point) })?.visibleFrame
+            ?? NSScreen.main?.visibleFrame
+            ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let size = context.frame.size
+        let origin = NSPoint(
+            x: min(max(point.x + 8, visible.minX), visible.maxX - size.width),
+            y: min(max(point.y - size.height - 8, visible.minY), visible.maxY - size.height)
+        )
+        context.setFrameOrigin(origin)
+        context.orderFrontRegardless()
+        installPetContextMonitors()
+    }
+
+    private func dismissPetContext() {
+        petContextPanel?.orderOut(nil)
+        for monitor in petContextMonitors { NSEvent.removeMonitor(monitor) }
+        petContextMonitors.removeAll()
+    }
+
+    private func installPetContextMonitors() {
+        guard petContextMonitors.isEmpty else { return }
+        let mouseEvents: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        if let local = NSEvent.addLocalMonitorForEvents(matching: mouseEvents.union(.keyDown), handler: { [weak self] event in
+            guard let self else { return event }
+            if event.type == .keyDown, event.keyCode == 53 {
+                self.dismissPetContext()
+                return nil
+            }
+            if event.type != .keyDown, event.window !== self.petContextPanel {
+                self.dismissPetContext()
+            }
+            return event
+        }) {
+            petContextMonitors.append(local)
+        }
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: mouseEvents, handler: { [weak self] _ in
+            Task { @MainActor [weak self] in self?.dismissPetContext() }
+        }) {
+            petContextMonitors.append(global)
+        }
     }
 
     private func setupComposerPanel() {
@@ -808,6 +914,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         panel.orderFrontRegardless()
                     }
                 } else {
+                    self.dismissPetContext()
                     self.panel?.orderOut(nil)
                 }
                 self.updateComposerPanel()
