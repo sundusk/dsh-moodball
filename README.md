@@ -31,7 +31,7 @@
 - **dsh-moodball-status**：状态与输入桥接插件（订阅 Agent 会话事件，提供 HTTP/状态 Socket 兼容接口，以及用户级命令 Socket；无 Harness Web UI、无设置项）
 
 插件包名和应用数据目录暂沿用 `dsh-moodball` / `MoodBall`，以兼容已有配置。安装脚本会清理旧版 `MoodBall.app`。
-截至 2026-09-26，最新 Release 仍是旧版心情球（v0.5.2），尚未提供 `DSH-Pet.app.zip`；要使用当前版本的 DSH Pet，请按下方步骤从本仓库构建。
+当前版本为 **v0.6.0**，可从 [GitHub Releases](https://github.com/sundusk/dsh-pet/releases/latest) 下载 `DSH-Pet.app.zip`。安装脚本也会自动获取这个安装包。
 
 一切配置都在 app 的设置面板里完成。
 
@@ -77,23 +77,22 @@ pnpm dsh web
 
 两种方式默认在 `http://127.0.0.1:3080` 打开 Web UI。已有 DeepSeek Harness 桌面版的用户也可以继续使用桌面版；其插件安装步骤见下文。
 
-### 安装 DSH Pet（当前版本）
+### 安装 DSH Pet（推荐）
 
-安装 Xcode 命令行工具后，另开一个终端执行：
+另开一个终端执行：
 
 ```bash
-git clone https://github.com/sundusk/dsh-pet.git
+git clone --depth 1 https://github.com/sundusk/dsh-pet.git
 cd dsh-pet
-MOODBALL_SKIP_OPEN=1 bash make-app.sh
 bash install.sh
 ```
 
-`make-app.sh` 构建带小雨图集的 `dist/DSH Pet.app`。`install.sh` 使用这个本地产物，并会：
+安装脚本会：
 
 1. 检测当前正在运行的 Harness，并识别桌面版、NPM/NPX 版或源码版
 2. 源码版在实际源码根目录执行 `pnpm dsh`；NPM/NPX 版执行对应的 `dsh` 或 `npx @deepseek-ai/dsh` CLI
 3. CLI 版在目标 Harness 的 `web` profile 中检测/安装状态插件；桌面版通过应用内「插件」页面安装
-4. 安装刚构建的 `DSH Pet.app`
+4. 下载最新 Release 中的 `DSH Pet.app`；如果当前目录已有 `dist/DSH Pet.app`，则优先使用本地构建产物
 5. 优先安装到 `/Applications`，无权限时自动回退到 `~/Applications` 并启动；安装后只保留一个 `DSH Pet.app`，旧版 `MoodBall.app` 和重复构建副本会移入废纸篓
 
 安装脚本只需要执行一次。若插件刚安装而当前 Harness 正在运行，脚本仍会继续安装并启动
@@ -111,6 +110,8 @@ DSH_SOURCE_ROOT="$HOME/Projects/deepseek-harness" bash install.sh
 
 安装器会复用当前环境或已识别 Harness 的 `DSH_HOME`，并将最近使用的 Harness 类型、源码路径和 profile
 记录在 `~/Library/Application Support/MoodBall/config.json`，供下一次安装使用。
+
+如需自行构建，请先安装 Xcode 命令行工具，在本仓库运行 `MOODBALL_SKIP_OPEN=1 bash make-app.sh`，再运行 `bash install.sh`。
 
 桌面版使用独立的 `desktop` profile。请在桌面版「插件」页面安装并启用 `github:sundusk/dsh-pet`，再重启桌面版让插件加载。公开 `dsh plugin` CLI 不能管理桌面版 profile；安装器检测到桌面版时不会把插件误装到 `web` profile。DSH Pet 使用本地 Socket 接收桌面版状态；桌面版晚启动或重启后会自动重连。
 
