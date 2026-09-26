@@ -62,14 +62,6 @@ final class MoodBallPanel: NSPanel {
 /// Separate control surface below the pet. Keeping it in its own panel means
 /// expanding the composer never changes the pet window's drag anchor or size.
 final class MoodBallComposerPanel: NSPanel {
-    static weak var current: MoodBallComposerPanel?
-
-    /// Prevent hover updates from snapping the panel back to its saved origin
-    /// while the Mini drag gesture is moving it.
-    var isMiniDragging = false
-    /// Session-only Mini origin used when the user disables position saving.
-    var transientMiniPosition: CGPoint?
-
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
     override var acceptsFirstResponder: Bool { true }
@@ -192,12 +184,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: .waterballToggleSettings,
             object: nil
         )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(composerPanelMoved),
-            name: .moodBallComposerPanelMoved,
-            object: nil
-        )
         appLog.info("didFinishLaunching done")
     }
 
@@ -280,8 +266,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             positionAtBottomRight(panel)
         }
         MoodBallPanel.current = panel
-        if SettingsStore.shared.isPetVisible,
-           SettingsStore.shared.displayMode == .petAndControls {
+        if SettingsStore.shared.isPetVisible {
             panel.orderFrontRegardless()
         }
         self.panel = panel
@@ -375,7 +360,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hosting.layer?.backgroundColor = NSColor.clear.cgColor
         p.contentView = hosting
         self.composerPanel = p
-        MoodBallComposerPanel.current = p
         updateComposerPanel()
     }
 
@@ -417,21 +401,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func screenParametersChanged() {
-        if isMiniMode {
-            guard let composerPanel, composerPanel.isVisible else { return }
-            let center = NSPoint(x: composerPanel.frame.midX, y: composerPanel.frame.midY)
-            let centerOnScreen = NSScreen.screens.map(\.visibleFrame).contains { $0.contains(center) }
-            if !centerOnScreen {
-                positionAtBottomRight(composerPanel)
-                let miniOrigin = Self.miniOrigin(for: composerPanel.frame)
-                composerPanel.transientMiniPosition = miniOrigin
-                if SettingsStore.shared.rememberPosition {
-                    SettingsStore.shared.savedMiniPosition = miniOrigin
-                }
-            }
-            updateTaskPanel()
-            return
-        }
         guard let panel, panel.isVisible else { return }
         // 显示器增删/分辨率变化后，若窗口中心不在任何屏幕的可视区内
         // （可能只留一截在屏边、球心已甩到无屏幕区域，导致拖不到），
@@ -448,25 +417,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func resetPositionRequested() {
-        if isMiniMode, let composerPanel {
-            positionAtBottomRight(composerPanel)
-            let miniOrigin = Self.miniOrigin(for: composerPanel.frame)
-            composerPanel.transientMiniPosition = miniOrigin
-            if SettingsStore.shared.rememberPosition {
-                SettingsStore.shared.savedMiniPosition = miniOrigin
-            }
-            return
-        }
         guard let panel else { return }
         positionAtBottomRight(panel)
     }
 
     @objc private func toggleSettingsPanelNotification() {
         toggleSettingsPanel()
-    }
-
-    @objc private func composerPanelMoved() {
-        updateTaskPanel()
     }
 
     // MARK: - 设置联动
@@ -559,8 +515,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateHover() {
         let settings = SettingsStore.shared
-        let isMini = settings.displayMode == .controlsOnly
-        guard panel?.isVisible == true || (isMini && composerPanel?.isVisible == true) else { return }
+        guard panel?.isVisible == true else { return }
         let mouse = NSEvent.mouseLocation
         let d = settings.ballSize
         let petFrame: NSRect?
@@ -664,28 +619,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let size: NSSize
-        switch model.barPhase {
-        case .resting:
-            size = NSSize(
-                width: MoodBallComposerView.restingPanelWidth,
-                height: MoodBallComposerView.restingPanelHeight
-            )
-        case .hovering:
-            size = NSSize(
-                width: MoodBallComposerView.expandedBarPanelWidth,
-                height: MoodBallComposerView.expandedBarPanelHeight
-            )
-        case .composer:
-            size = expandedComposerSize
-        }
-        if !composerPanel.isMiniDragging {
-            composerPanel.setFrame(composerFrame(size: size), display: true)
-        }
+        let size = Self.composerPanelSize(
+            for: model.barPhase,
+            expandedComposerSize: expandedComposerSize
+        )
+        composerPanel.setFrame(composerFrame(size: size), display: true)
         if model.barPhase == .composer {
             composerPanel.ignoresMouseEvents = false
-        } else if isMiniMode {
-            composerPanel.ignoresMouseEvents = settings.clickThroughMode == .always
         } else {
             composerPanel.ignoresMouseEvents = settings.clickThroughMode != .never
                 && model.barPhase != .hovering
@@ -700,6 +640,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 inputHeight: model.composerInputHeight,
                 showsStatusLine: model.commandClient.showsComposerStatusLine
             )
+        )
+    }
+
+    static func composerPanelSize(
+        for phase: MoodBallBarPhase,
+        expandedComposerSize: NSSize
+    ) -> NSSize {
+        if phase == .composer { return expandedComposerSize }
+        if phase == .hovering {
+            return NSSize(
+                width: MoodBallComposerView.expandedBarPanelWidth,
+                height: MoodBallComposerView.expandedBarPanelHeight
+            )
+        }
+        return NSSize(
+            width: MoodBallComposerView.restingPanelWidth,
+            height: MoodBallComposerView.restingPanelHeight
         )
     }
 
@@ -835,27 +792,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private var isMiniMode: Bool {
-        SettingsStore.shared.displayMode == .controlsOnly
-    }
-
     private func composerFrame(size: NSSize) -> NSRect {
-        let settings = SettingsStore.shared
-        if settings.displayMode == .controlsOnly,
-           let saved = settings.rememberPosition
-                ? settings.savedMiniPosition
-                : composerPanel?.transientMiniPosition {
-            let oldSize = NSSize(width: 104, height: 34)
-            let center = NSPoint(x: saved.x + oldSize.width / 2, y: saved.y + oldSize.height / 2)
-            return clampedComposerFrame(
-                NSRect(
-                    x: center.x - size.width / 2,
-                    y: center.y - size.height / 2,
-                    width: size.width,
-                    height: size.height
-                )
-            )
-        }
         guard let panel else { return NSRect(origin: .zero, size: size) }
         let centerX = panel.frame.midX
         let screen = NSScreen.screens.first(where: { $0.visibleFrame.contains(NSPoint(x: centerX, y: panel.frame.midY)) })
@@ -881,14 +818,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return clampedComposerFrame(NSRect(x: x, y: y, width: size.width, height: size.height))
     }
 
-    private static func miniOrigin(for frame: NSRect) -> CGPoint {
-        let miniSize = NSSize(width: 104, height: 34)
-        return CGPoint(
-            x: frame.midX - miniSize.width / 2,
-            y: frame.midY - miniSize.height / 2
-        )
-    }
-
     private func clampedComposerFrame(_ frame: NSRect) -> NSRect {
         let center = NSPoint(x: frame.midX, y: frame.midY)
         let screen = NSScreen.screens.first(where: { $0.visibleFrame.contains(center) })
@@ -904,15 +833,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - 宠物显示状态
 
     private func observeVisibility() {
-        visibilitySink = Publishers.CombineLatest(
-            SettingsStore.shared.$isPetVisible,
-            SettingsStore.shared.$displayMode
-        )
+        visibilitySink = SettingsStore.shared.$isPetVisible
             .receive(on: RunLoop.main)
-            .sink { [weak self] visible, displayMode in
+            .sink { [weak self] visible in
                 guard let self else { return }
                 if !visible { self.model.closeTaskPanel() }
-                if visible, displayMode == .petAndControls {
+                if visible {
                     if let panel = self.panel, !panel.isVisible {
                         panel.orderFrontRegardless()
                     }
@@ -923,7 +849,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.updateComposerPanel()
                 self.updateTaskPanel()
                 self.updateHover()
-                appLog.info("display surfaces: visible=\(visible, privacy: .public) mode=\(displayMode.rawValue, privacy: .public)")
+                appLog.info("display surfaces: visible=\(visible, privacy: .public)")
             }
     }
 
@@ -1139,7 +1065,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let appMenuItem = NSMenuItem()
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "关于 心情球", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: "关于 DSH Pet", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(makeShortcutMenuItem(
             action: .inputMessage,
@@ -1173,7 +1099,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             selector: #selector(toggleStatePreviewPanel)
         ))
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "退出 心情球", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "退出 DSH Pet", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appMenuItem.submenu = appMenu
         mainMenu.addItem(appMenuItem)
 
@@ -1257,7 +1183,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 backing: .buffered,
                 defer: false
             )
-            p.title = "心情球设置"
+            p.title = "DSH Pet 设置"
             p.isReleasedWhenClosed = false
             p.hidesOnDeactivate = false
             p.contentView = NSHostingView(rootView: SettingsPanelView())
@@ -1294,7 +1220,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 backing: .buffered,
                 defer: false
             )
-            p.title = "心情球状态展示"
+            p.title = "DSH Pet 状态展示"
             p.isReleasedWhenClosed = false
             p.hidesOnDeactivate = false
             p.contentView = NSHostingView(rootView: StatePreviewPanelView())

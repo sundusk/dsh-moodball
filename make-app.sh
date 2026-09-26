@@ -4,7 +4,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 EXEC_NAME="MoodBall"
-APP_NAME="MoodBall"
+APP_NAME="DSH Pet"
+BUNDLE_EXEC_NAME="DSHPet"
 BUNDLE_ID="com.sundusk.moodball"
 BUILD_DIR=".build/release"
 APP_DIR="dist/${APP_NAME}.app"
@@ -19,7 +20,7 @@ swift build -c release --disable-sandbox
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 
-cp "$BUILD_DIR/$EXEC_NAME" "$APP_DIR/Contents/MacOS/$EXEC_NAME"
+cp "$BUILD_DIR/$EXEC_NAME" "$APP_DIR/Contents/MacOS/$BUNDLE_EXEC_NAME"
 
 echo "==> 复制小雨宠物图集"
 for pet_resource in Resources/Pet/Xiaoyu/XiaoyuSprites.png Resources/Pet/Xiaoyu/XiaoyuDragSprites.png; do
@@ -50,7 +51,7 @@ sips -z 512 512 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_256x256@2x.png" >/dev/nu
 sips -z 512 512 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_512x512.png" >/dev/null
 sips -z 1024 1024 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_512x512@2x.png" >/dev/null
 
-iconutil -c icns "$ICONSET_DIR" -o "$APP_DIR/Contents/Resources/MoodBall.icns"
+iconutil -c icns "$ICONSET_DIR" -o "$APP_DIR/Contents/Resources/DSHPet.icns"
 
 cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -58,17 +59,17 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>心情球</string>
+	<string>DSH Pet</string>
 	<key>CFBundleDisplayName</key>
-	<string>心情球</string>
+	<string>DSH Pet</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.sundusk.moodball</string>
 	<key>CFBundleExecutable</key>
-	<string>MoodBall</string>
+	<string>DSHPet</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleIconFile</key>
-	<string>MoodBall</string>
+	<string>DSHPet</string>
 	<key>CFBundleShortVersionString</key>
 	<string>0.6.0</string>
 	<key>CFBundleVersion</key>

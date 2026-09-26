@@ -7,10 +7,6 @@ import SwiftUI
 struct MoodBallComposerView: View {
     @ObservedObject var model: MoodBallModel
     @ObservedObject var command: MoodBallCommandClient
-    @ObservedObject private var settings = SettingsStore.shared
-
-    @State private var miniGrabOffset: CGSize = .zero
-    @State private var hasMiniGrabOffset = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // Leave one small transparent inset around the idle capsule so its curved
@@ -32,8 +28,6 @@ struct MoodBallComposerView: View {
         Group {
             if model.barPhase == .composer {
                 expandedComposer
-            } else if settings.displayMode == .controlsOnly {
-                actionBar(isMini: true, expanded: true)
             } else {
                 standardComposer
             }
@@ -45,14 +39,14 @@ struct MoodBallComposerView: View {
     private var standardComposer: some View {
         switch model.barPhase {
         case .resting, .hovering:
-            actionBar(isMini: false, expanded: model.barPhase == .hovering)
+            actionBar(expanded: model.barPhase == .hovering)
         case .composer:
             expandedComposer
         }
     }
 
-    private func actionBar(isMini: Bool, expanded: Bool) -> some View {
-        let expandedWidth: CGFloat = isMini ? 212 : 180
+    private func actionBar(expanded: Bool) -> some View {
+        let expandedWidth: CGFloat = 148
         let shapeAnimation: Animation? = reduceMotion
             ? nil
             : (expanded
@@ -76,16 +70,6 @@ struct MoodBallComposerView: View {
 
             if expanded {
                 HStack(spacing: 4) {
-                    if isMini {
-                        Image(systemName: "line.3.horizontal")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 24, height: 26)
-                            .contentShape(Rectangle())
-                            .gesture(miniDragGesture)
-                            .accessibilityLabel("拖动 Mini 控件")
-                    }
-
                     actionButton("square.and.pencil", label: "输入消息") {
                         model.openComposer(focus: false)
                     }
@@ -114,11 +98,6 @@ struct MoodBallComposerView: View {
                         model.toggleTaskPanel(.recent)
                     }
                     .disabled(!command.taskListAvailable)
-
-                    actionButton(model.taskPanelMode == .active ? "chevron.down" : "chevron.up", label: "展开当前任务") {
-                        model.toggleTaskPanel(.active)
-                    }
-                    .disabled(!command.taskListAvailable)
                 }
                 .padding(.horizontal, 7)
                 .transition(.scale(scale: 0.92).combined(with: .opacity))
@@ -140,43 +119,6 @@ struct MoodBallComposerView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
-    }
-
-    private var miniDragGesture: some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { _ in
-                guard settings.clickThroughMode != .always,
-                      let panel = MoodBallComposerPanel.current else { return }
-                let mouse = NSEvent.mouseLocation
-                if !hasMiniGrabOffset {
-                    panel.isMiniDragging = true
-                    miniGrabOffset = CGSize(
-                        width: mouse.x - panel.frame.origin.x,
-                        height: mouse.y - panel.frame.origin.y
-                    )
-                    hasMiniGrabOffset = true
-                }
-                panel.setFrameOrigin(NSPoint(
-                    x: mouse.x - miniGrabOffset.width,
-                    y: mouse.y - miniGrabOffset.height
-                ))
-                NotificationCenter.default.post(name: .moodBallComposerPanelMoved, object: nil)
-            }
-            .onEnded { _ in
-                if let panel = MoodBallComposerPanel.current, hasMiniGrabOffset {
-                    let frame = panel.frame
-                    // Persist the legacy 104×34 Mini anchor so existing saved
-                    // positions and the wider action bar keep the same center.
-                    let position = CGPoint(x: frame.midX - 52, y: frame.midY - 17)
-                    panel.transientMiniPosition = position
-                    if settings.rememberPosition {
-                        settings.savedMiniPosition = position
-                    }
-                    panel.isMiniDragging = false
-                }
-                hasMiniGrabOffset = false
-                miniGrabOffset = .zero
-            }
     }
 
     private var expandedComposer: some View {
@@ -307,7 +249,7 @@ struct MoodBallComposerView: View {
             }
 
             if command.connection != .connected || !command.capabilitiesAvailable {
-                Text("输入服务未连接，请确认新版 MoodBall 插件已加载")
+                Text("输入服务未连接，请确认 DSH Pet 桥接插件已加载")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)

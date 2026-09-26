@@ -1,10 +1,10 @@
 #!/bin/bash
 # =============================================================================
-# MoodBall 卸载脚本
+# DSH Pet 卸载脚本
 #
 # 功能：
-#   1. 退出正在运行的 MoodBall
-#   2. 删除 ~/Applications/MoodBall.app（及 /Applications 下的同名残留）
+#   1. 退出正在运行的 DSH Pet / 旧版 MoodBall
+#   2. 删除 Applications 中的新旧应用包
 #   3. 询问是否同时移除 dsh-moodball-status 插件（dsh plugin remove）
 #
 # 用法：
@@ -13,6 +13,8 @@
 set -euo pipefail
 
 APP_CANDIDATES=(
+    "$HOME/Applications/DSH Pet.app"
+    "/Applications/DSH Pet.app"
     "$HOME/Applications/MoodBall.app"
     "/Applications/MoodBall.app"
 )
@@ -21,9 +23,13 @@ info() { printf "\033[1;34m[info]\033[0m %s\n" "$1"; }
 ok()   { printf "\033[1;32m[ok]\033[0m   %s\n" "$1"; }
 
 # ---------------------------------------------------------------- 1. 退出 app
-info "退出 MoodBall……"
+info "退出 DSH Pet……"
+osascript -e 'tell application "DSH Pet" to quit' 2>/dev/null || true
 osascript -e 'tell application "MoodBall" to quit' 2>/dev/null || true
 sleep 1
+if pgrep -x DSHPet >/dev/null 2>&1; then
+    pkill -x DSHPet 2>/dev/null || true
+fi
 if pgrep -x MoodBall >/dev/null 2>&1; then
     pkill -x MoodBall 2>/dev/null || true
 fi
@@ -32,13 +38,13 @@ fi
 removed=0
 for p in "${APP_CANDIDATES[@]}"; do
     if [ -d "$p" ]; then
-        rm -rf "$p"
+        /usr/bin/trash "$p"
         ok "已删除 $p"
         removed=1
     fi
 done
 if [ "$removed" = "0" ]; then
-    info "未找到 MoodBall.app（可能装在别的位置，请手动移入废纸篓）。"
+    info "未找到 DSH Pet.app 或 MoodBall.app（可能装在别的位置，请手动移入废纸篓）。"
 fi
 
 # ---------------------------------------------------------------- 3. 移除插件（询问）

@@ -1,13 +1,13 @@
 #!/bin/bash
 # =============================================================================
-# MoodBall 一键安装脚本
+# DSH Pet 一键安装脚本
 #
 # 安装层会绑定到用户实际使用的 Harness：
 #   - Source：在 sourceRoot 内执行 pnpm dsh
 #   - NPM/NPX：执行 dsh 或 npx @deepseek-ai/dsh
 #   - Desktop：检测并提示在桌面版插件页面安装，不调用公开 CLI 修改保留的 desktop profile
 #
-# 运行架构不变：DeepSeek Harness → dsh-moodball-status → HTTP / Unix Socket → MoodBall.app
+# 运行架构不变：DeepSeek Harness → dsh-moodball-status → HTTP / Unix Socket → DSH Pet.app
 # =============================================================================
 set -euo pipefail
 
@@ -16,8 +16,8 @@ PLUGIN_NAME="@sundusk/dsh-moodball-status"
 PLUGIN_PROFILE="web"
 STATUS_URL="${MOODBALL_STATUS_URL:-http://127.0.0.1:3080/api/moodball/status}"
 SOCKET_PATH="${MOODBALL_SOCKET_PATH:-$HOME/Library/Application Support/MoodBall/moodball.sock}"
-APP_SRC="dist/MoodBall.app"
-RELEASE_URL="https://github.com/sundusk/dsh-moodball/releases/latest/download/MoodBall.app.zip"
+APP_SRC="dist/DSH Pet.app"
+RELEASE_URL="https://github.com/sundusk/dsh-moodball/releases/latest/download/DSH-Pet.app.zip"
 CONFIG_PATH="$HOME/Library/Application Support/MoodBall/config.json"
 
 APP_TMP=""
@@ -551,19 +551,19 @@ NODE
 
 choose_app_destination() {
     if [ -d "/Applications" ] && [ -w "/Applications" ]; then
-        APP_DEST="/Applications/MoodBall.app"
+        APP_DEST="/Applications/DSH Pet.app"
     else
-        APP_DEST="$HOME/Applications/MoodBall.app"
+        APP_DEST="$HOME/Applications/DSH Pet.app"
     fi
 }
 
-stop_running_moodball() {
+stop_running_pet() {
     local pid command
 
     while read -r pid command; do
         [ -n "$pid" ] || continue
         case "$command" in
-            */MoodBall.app/Contents/MacOS/MoodBall)
+            */MoodBall.app/Contents/MacOS/MoodBall|*/DSH\ Pet.app/Contents/MacOS/DSHPet)
                 kill "$pid" 2>/dev/null || true
                 ;;
         esac
@@ -577,10 +577,13 @@ cleanup_duplicate_apps() {
     for candidate in \
         "/Applications/MoodBall.app" \
         "$HOME/Applications/MoodBall.app" \
-        "$PWD/dist/MoodBall.app"; do
+        "$PWD/dist/MoodBall.app" \
+        "/Applications/DSH Pet.app" \
+        "$HOME/Applications/DSH Pet.app" \
+        "$PWD/dist/DSH Pet.app"; do
         [ "$candidate" = "$APP_DEST" ] && continue
         [ -d "$candidate" ] || continue
-        info "清理重复 MoodBall.app：$candidate"
+        info "清理旧版或重复应用：$candidate"
         /usr/bin/trash "$candidate"
     done
 }
@@ -588,25 +591,25 @@ cleanup_duplicate_apps() {
 install_app() {
     choose_app_destination
     mkdir -p "$(dirname "$APP_DEST")"
-    info "安装 MoodBall.app 到 $APP_DEST ……"
+    info "安装 DSH Pet.app 到 $APP_DEST ……"
 
     # 同目录 staging：复制失败时保留旧版本，不留下半个 App。
-    APP_STAGE="$(mktemp -d "$(dirname "$APP_DEST")/.MoodBall.install.XXXXXX")"
-    cp -R "$APP_SRC" "$APP_STAGE/MoodBall.app"
+    APP_STAGE="$(mktemp -d "$(dirname "$APP_DEST")/.DSHPet.install.XXXXXX")"
+    cp -R "$APP_SRC" "$APP_STAGE/DSH Pet.app"
     if [ -d "$APP_DEST" ]; then
         /usr/bin/trash "$APP_DEST"
     fi
-    mv "$APP_STAGE/MoodBall.app" "$APP_DEST"
+    mv "$APP_STAGE/DSH Pet.app" "$APP_DEST"
     rm -rf "$APP_STAGE"
     APP_STAGE=""
     xattr -dr com.apple.quarantine "$APP_DEST" 2>/dev/null || true
-    ok "MoodBall.app 已安装到 $APP_DEST"
+    ok "DSH Pet.app 已安装到 $APP_DEST"
     cleanup_duplicate_apps
 }
 
 # ---------------------------------------------------------------- 1. 检查 macOS
 if [ "$(uname -s 2>/dev/null || true)" != "Darwin" ]; then
-    err "MoodBall 目前只支持 macOS。"
+    err "DSH Pet 目前只支持 macOS。"
     exit 1
 fi
 MACOS_VERSION=$(sw_vers -productVersion 2>/dev/null || true)
@@ -635,7 +638,7 @@ if select_harness; then
         info "请在桌面版「插件」页面安装并启用 $PLUGIN_SPEC；公开 CLI 不能管理 desktop profile。"
     fi
 else
-    warn "未检测到可绑定的 DeepSeek Harness；仍会安装 MoodBall.app。"
+    warn "未检测到可绑定的 DeepSeek Harness；仍会安装 DSH Pet.app。"
     warn "之后可设置 DSH_SOURCE_ROOT，或重新运行安装器来安装状态插件。"
 fi
 
@@ -698,7 +701,7 @@ if [ "$PLUGIN_STATE" = "notInstalled" ]; then
     else
         PLUGIN_STATE="unknown"
         PLUGIN_INSTALL_FAILED=1
-        err "状态插件安装失败；仍会继续安装 MoodBall.app。"
+        err "状态插件安装失败；仍会继续安装 DSH Pet.app。"
         if [ "$HARNESS_TYPE" = "source" ]; then
             echo "请在源码根目录手动执行："
             echo "  cd \"$HARNESS_SOURCE_ROOT\" && pnpm dsh plugin --profile $PLUGIN_PROFILE add $PLUGIN_SPEC"
@@ -714,16 +717,16 @@ if [ -d "$APP_SRC" ]; then
 else
     info "未找到本地 ${APP_SRC}，下载 GitHub latest release……"
     APP_TMP="$(mktemp -d)"
-    if ! curl -fsSL -L -m 120 -o "$APP_TMP/MoodBall.app.zip" "$RELEASE_URL"; then
+    if ! curl -fsSL -L -m 120 -o "$APP_TMP/DSH-Pet.app.zip" "$RELEASE_URL"; then
         err "下载 latest release 失败：$RELEASE_URL"
-        echo "请检查网络，或手动下载：https://github.com/sundusk/dsh-moodball/releases/latest"
+        echo "新版 Release 可能尚未发布；可先在仓库构建 dist/DSH Pet.app 后重试。"
         exit 1
     fi
-    if ! unzip -qo "$APP_TMP/MoodBall.app.zip" -d "$APP_TMP"; then
+    if ! unzip -qo "$APP_TMP/DSH-Pet.app.zip" -d "$APP_TMP"; then
         err "解压失败（需要 unzip 命令）。"
         exit 1
     fi
-    APP_SRC="$APP_TMP/MoodBall.app"
+    APP_SRC="$APP_TMP/DSH Pet.app"
     ok "已下载并解压 latest release 版 App"
 fi
 
@@ -734,7 +737,7 @@ fi
 
 # 旧版 Waterball 迁移保持原有行为；不会触碰 Harness 进程。
 if [ -d "/Applications/Waterball.app" ]; then
-    info "检测到旧版 Waterball.app，正在迁移到 MoodBall……"
+    info "检测到旧版 Waterball.app，正在迁移到 DSH Pet……"
     osascript -e 'tell application "Waterball" to quit' 2>/dev/null || true
     sleep 1
     if pgrep -x Waterball >/dev/null 2>&1; then
@@ -744,11 +747,11 @@ if [ -d "/Applications/Waterball.app" ]; then
     ok "旧版 Waterball.app 已移除"
 fi
 
-stop_running_moodball
+stop_running_pet
 install_app
 APP_TMP=""
 
-info "启动 MoodBall……"
+info "启动 DSH Pet……"
 if open "$APP_DEST" >/dev/null 2>&1; then
     ok "启动完成！"
 else
@@ -766,11 +769,11 @@ save_harness_config || true
 
 echo ""
 echo "══════════════════════════════════════════════════════════════"
-echo "  ✅ MoodBall 安装完成！"
+echo "  ✅ DSH Pet 安装完成！"
 echo ""
 case "$PLUGIN_STATE" in
     active)
-        echo "  ✓ 状态插件已连接，MoodBall 会随 Agent 状态变化。"
+        echo "  ✓ 状态插件已连接，DSH Pet 会随 Agent 状态变化。"
         ;;
     installedInactive)
         echo "  ✓ 状态插件已安装。"
@@ -778,9 +781,9 @@ case "$PLUGIN_STATE" in
             echo "  ⚠ 当前运行中的 Harness 尚未加载插件。"
             echo "    请在当前任务完成后重启一次 DeepSeek Harness。"
         else
-            echo "  ℹ Harness 当前未运行；之后启动 Harness 后 MoodBall 会自动连接。"
+            echo "  ℹ Harness 当前未运行；之后启动 Harness 后 DSH Pet 会自动连接。"
         fi
-        echo "    无需再次运行 MoodBall 安装脚本。"
+        echo "    无需再次运行 DSH Pet 安装脚本。"
         ;;
     notInstalled)
         echo "  ⚠ 状态插件尚未安装。"
@@ -789,13 +792,13 @@ case "$PLUGIN_STATE" in
         echo "  ⚠ 暂时无法确认状态插件是否已连接。"
         if [ "$HARNESS_TYPE" = "desktop" ]; then
             echo "    请在桌面版「插件」页面确认 $PLUGIN_NAME 已安装并启用。"
-            echo "    安装或启用后重启桌面版 Host，MoodBall 会自动重连。"
+            echo "    安装或启用后重启桌面版 Host，DSH Pet 会自动重连。"
         else
-            echo "    MoodBall 会先显示未连接状态；请检查目标 Harness 和插件安装结果。"
+            echo "    DSH Pet 会先显示未连接状态；请检查目标 Harness 和插件安装结果。"
         fi
         ;;
 esac
-echo "  ✓ MoodBall.app 已安装并已尝试启动：$APP_DEST"
+echo "  ✓ DSH Pet 已安装并已尝试启动：$APP_DEST"
 echo ""
 echo "  说明：CLI 安装仅操作选定 Harness 的 web profile；Desktop 插件由桌面版管理。"
 echo "        安装器不会停止、重启或修改 Harness Session。"

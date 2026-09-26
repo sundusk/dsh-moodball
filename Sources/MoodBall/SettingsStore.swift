@@ -39,20 +39,6 @@ enum FloatingPetSkin: String, CaseIterable, Identifiable {
     }
 }
 
-enum FloatingDisplayMode: String, CaseIterable, Identifiable {
-    case petAndControls
-    case controlsOnly
-
-    var id: String { rawValue }
-
-    var label: String {
-        switch self {
-        case .petAndControls: return "宠物＋控件"
-        case .controlsOnly: return "仅控件（Mini）"
-        }
-    }
-}
-
 enum MoodBallShortcutAction: String, CaseIterable, Identifiable, Hashable {
     case inputMessage
     case newSession
@@ -153,7 +139,6 @@ final class PetSettings: ObservableObject {
 
     private enum Key {
         static let skin = "moodball.skin"
-        static let displayMode = "moodball.displayMode"
         static let ballSize = "moodball.ballSize"
         static let breathingSpeed = "moodball.breathingSpeed"
         static let apiBase = "moodball.apiBase"
@@ -169,8 +154,6 @@ final class PetSettings: ObservableObject {
         static let isPetVisible = "moodball.isPetVisible"
         static let positionX = "moodball.ballPositionX"
         static let positionY = "moodball.ballPositionY"
-        static let miniPositionX = "moodball.miniPositionX"
-        static let miniPositionY = "moodball.miniPositionY"
         static let globalHotKeyEnabled = "moodball.globalHotKeyEnabled"
         static let globalHotKeyKeyCode = "moodball.globalHotKeyKeyCode"
         static let globalHotKeyModifiers = "moodball.globalHotKeyModifiers"
@@ -199,10 +182,6 @@ final class PetSettings: ObservableObject {
 
     @Published var skin: FloatingPetSkin {
         didSet { defaults.set(skin.rawValue, forKey: Key.skin) }
-    }
-
-    @Published var displayMode: FloatingDisplayMode {
-        didSet { defaults.set(displayMode.rawValue, forKey: Key.displayMode) }
     }
 
     @Published var ballSize: CGFloat {
@@ -297,23 +276,6 @@ final class PetSettings: ObservableObject {
         }
     }
 
-    var savedMiniPosition: CGPoint? {
-        get {
-            guard let x = Self.number(defaults, for: Key.miniPositionX, legacy: Key.miniPositionX),
-                  let y = Self.number(defaults, for: Key.miniPositionY, legacy: Key.miniPositionY) else { return nil }
-            return CGPoint(x: x, y: y)
-        }
-        set {
-            if let newValue {
-                defaults.set(Double(newValue.x), forKey: Key.miniPositionX)
-                defaults.set(Double(newValue.y), forKey: Key.miniPositionY)
-            } else {
-                defaults.removeObject(forKey: Key.miniPositionX)
-                defaults.removeObject(forKey: Key.miniPositionY)
-            }
-        }
-    }
-
     var globalHotKeyConfiguration: GlobalHotKeyConfiguration {
         GlobalHotKeyConfiguration(
             isEnabled: globalHotKeyEnabled,
@@ -383,8 +345,11 @@ final class PetSettings: ObservableObject {
         self.defaults = defaults
         let clamp = { (value: Double, lower: Double, upper: Double) in min(max(value, lower), upper) }
 
-        skin = FloatingPetSkin(rawValue: defaults.string(forKey: Key.skin) ?? "") ?? .xiaoyu
-        displayMode = FloatingDisplayMode(rawValue: defaults.string(forKey: Key.displayMode) ?? "") ?? .petAndControls
+        let initialSkin = FloatingPetSkin(rawValue: defaults.string(forKey: Key.skin) ?? "") ?? .xiaoyu
+        skin = initialSkin
+        if defaults.object(forKey: Key.skin) == nil {
+            defaults.set(initialSkin.rawValue, forKey: Key.skin)
+        }
         ballSize = CGFloat(clamp(Self.number(defaults, for: Key.ballSize, legacy: LegacyKey.ballSize) ?? 120, 60, 200))
         breathingSpeed = clamp(Self.number(defaults, for: Key.breathingSpeed, legacy: LegacyKey.breathingSpeed) ?? 2, 0.5, 5)
         apiBase = Self.string(defaults, for: Key.apiBase, legacy: LegacyKey.apiBase) ?? "http://127.0.0.1:3080"
@@ -499,7 +464,6 @@ typealias SettingsStore = PetSettings
 extension Notification.Name {
     static let waterballResetPosition = Notification.Name("waterballResetPosition")
     static let waterballToggleSettings = Notification.Name("waterballToggleSettings")
-    static let moodBallComposerPanelMoved = Notification.Name("moodBallComposerPanelMoved")
 }
 
 func colorToHex(_ color: Color) -> UInt32 {

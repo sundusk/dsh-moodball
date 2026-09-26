@@ -61,9 +61,9 @@ enum MoodBallCommandError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .unavailable: return "发送服务未连接，请确认 MoodBall 插件已加载"
+        case .unavailable: return "发送服务未连接，请确认 DSH Pet 桥接插件已加载"
         case .timedOut: return "提交结果未确认"
-        case .malformed: return "MoodBall 插件返回了无法识别的结果"
+        case .malformed: return "DSH Pet 桥接插件返回了无法识别的结果"
         case .server(_, let message): return message
         }
     }
@@ -262,7 +262,7 @@ final class MoodBallCommandClient: ObservableObject {
     func addImageFromPasteboard(_ pasteboard: NSPasteboard = .general) {
         guard submissionStatus != .submitting else { return }
         guard imageAttachmentsAvailable else {
-            lastError = "当前 MoodBall 插件不支持图片附件"
+            lastError = "当前 DSH Pet 桥接插件不支持图片附件"
             return
         }
         guard let image = NSImage(pasteboard: pasteboard),
@@ -278,7 +278,7 @@ final class MoodBallCommandClient: ObservableObject {
     func makeRegionCaptureURL() -> URL? {
         guard submissionStatus != .submitting else { return nil }
         guard imageAttachmentsAvailable else {
-            lastError = "当前 MoodBall 插件不支持图片附件"
+            lastError = "当前 DSH Pet 桥接插件不支持图片附件"
             return nil
         }
         do {
@@ -652,7 +652,7 @@ final class MoodBallCommandClient: ObservableObject {
                 let error = object["error"] as? [String: Any]
                 continuation(.failure(MoodBallCommandError.server(
                     code: error?["code"] as? String ?? "command-failed",
-                    message: error?["message"] as? String ?? "MoodBall 插件拒绝了请求"
+                    message: error?["message"] as? String ?? "DSH Pet 桥接插件拒绝了请求"
                 )))
             } else {
                 continuation(.success(object))

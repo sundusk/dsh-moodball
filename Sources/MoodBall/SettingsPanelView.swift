@@ -135,25 +135,6 @@ private struct AppearanceTab: View {
                 .pickerStyle(.menu)
             }
 
-            LabeledContent("显示模式") {
-                Picker("显示模式", selection: Binding(
-                    get: { settings.displayMode },
-                    set: { settings.displayMode = $0 }
-                )) {
-                    ForEach(FloatingDisplayMode.allCases) { mode in
-                        Text(mode.label).tag(mode)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-            }
-
-            Text(settings.displayMode == .controlsOnly
-                ? "Mini 模式只显示快捷控件；它的位置与桌宠位置分开保存，可独立拖动。"
-                : "显示桌宠和快捷控件；两者会围绕桌宠位置排列。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
             LabeledContent("桌宠大小") {
                 HStack {
                     Slider(value: Binding(
@@ -373,7 +354,7 @@ private struct ShortcutsTab: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("设置一个可在任意应用中唤起 MoodBall 输入框的全局快捷键。")
+            Text("设置一个可在任意应用中唤起 DSH Pet 输入框的全局快捷键。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -411,7 +392,7 @@ private struct ShortcutsTab: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text("功能快捷键")
                     .font(.headline.weight(.semibold))
-                Text("下面的快捷键对应 MoodBall 菜单中的功能；可以单独修改或关闭。")
+                Text("下面的快捷键对应 DSH Pet 菜单中的功能；可以单独修改或关闭。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
