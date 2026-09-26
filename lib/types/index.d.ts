@@ -3,7 +3,7 @@
  * UI, no settings namespace) that tracks agent activity and serves a stable
  * snapshot over HTTP and a local Unix socket for the MoodBall macOS desktop app.
  * Install
- * via `dsh plugin --profile web add github:sundusk/dsh-moodball`.
+ * via `dsh plugin --profile web add github:sundusk/dsh-pet`.
  * @module @sundusk/dsh-moodball-status
  */
 import { Context } from '@deepseek-ai/cordis';

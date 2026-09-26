@@ -1,12 +1,8 @@
-<p align="center">
-  <img src="docs/assets/moodball-logo.png" width="140" alt="DSH Pet">
-</p>
-
-<h1 align="center">DSH Pet（dsh-pet）</h1>
+<h1 align="center">小雨 · DSH Pet</h1>
 
 <p align="center">
-  DeepSeek Harness macOS Desktop Pet —— 让 Agent 状态飞出 Web UI，悬浮在你桌面的任意位置<br>
-  菜单栏常驻 + 置顶桌宠，支持心情球与小雨两种皮肤，随 Agent 状态实时变化
+  让小雨陪你在 macOS 桌面上使用 DeepSeek Harness<br>
+  她会随 Agent 的状态变换动作，也能帮你查看任务、发送消息
 </p>
 
 <p align="center">
@@ -14,58 +10,89 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/sundusk/dsh-moodball/releases/latest">⬇️ 下载最新 Release</a>
+  <a href="#-安装">⬇️ 安装小雨</a>
 </p>
 
-## 🎈 这是什么？
+## 🌧️ 认识小雨
 
-**DSH Pet** 把 Agent 的状态带到你的**整个桌面**上。它提供心情球和小雨两种桌宠形象，
-可以拖到屏幕**任意位置**并记住位置。即使浏览器已最小化，或从未打开 Web UI，
-也能通过宠物的颜色、动画和状态气泡看到任务进度。
+**小雨**是 DSH Pet 默认的像素桌宠。她待在桌面上，随着 DeepSeek Harness 的任务状态
+待机、思考、等待授权或回答、庆祝完成，也会在任务失败时给出提示。你可以把她拖到屏幕任意位置，
+双击看她挥手；浏览器最小化后，她仍会显示状态气泡、任务提醒和消息入口。
+
+心情球仍可在「设置 → 外观 → 桌宠」中选择。
 
 ### 项目组成
 
-- **DSH Pet.app**：桌面宠物应用（心情球 / 小雨）
+- **DSH Pet.app**：以小雨为默认形象的 macOS 桌宠应用，也提供心情球皮肤
 - **dsh-moodball-status**：状态与输入桥接插件（订阅 Agent 会话事件，提供 HTTP/状态 Socket 兼容接口，以及用户级命令 Socket；无 Harness Web UI、无设置项）
 
-仓库地址、插件标识和应用数据目录暂沿用 `dsh-moodball` / `MoodBall`，以兼容已有配置。安装脚本会清理旧版 `MoodBall.app`。
-新版 Release 发布前，请从本仓库构建 `dist/DSH Pet.app` 后运行安装脚本；当前线上 Release 仍可能是旧版。
+插件包名和应用数据目录暂沿用 `dsh-moodball` / `MoodBall`，以兼容已有配置。安装脚本会清理旧版 `MoodBall.app`。
+截至 2026-09-26，最新 Release 仍是旧版心情球（v0.5.2），尚未提供 `DSH-Pet.app.zip`；要使用小雨，请按下方步骤从本仓库构建。
 
 一切配置都在 app 的设置面板里完成。
 
-### 📸 效果展示
+### 小雨动作帧
 
 <p align="center">
-  <img src="docs/assets/moodball-desktop.jpg" width="720" alt="MoodBall 桌面悬浮球效果">
+  <img src="Resources/Pet/Xiaoyu/XiaoyuSprites.png" width="640" alt="小雨的未连接、待机、思考、授权、提问、完成、失败和挥手动作帧">
 </p>
 
 <p align="center">
-  悬浮在桌面上的心情球 —— 可拖到屏幕任意位置，随时查看 Agent 状态
+  项目使用的原始动作图集：从上到下依次是未连接、待机、思考、等待授权、等待回答、完成、失败和挥手
+</p>
+
+<p align="center">
+  <img src="Resources/Pet/Xiaoyu/XiaoyuDragSprites.png" width="640" alt="小雨左右拖动时的奔跑动作帧">
+</p>
+
+<p align="center">
+  左右拖动时的奔跑动作帧
 </p>
 
 ## 🚀 安装
 
-### 安装依赖
+### 先运行 DeepSeek Harness
 
-1. **macOS 14+**
-2. **DeepSeek Harness**：支持桌面版、NPM/NPX 版和官方源码版，安装方法见 [官方文档](https://github.com/deepseek-ai/deepseek-harness)
-3. **CLI 版依赖**：NPM/NPX 版需要 Node.js；源码版需要在源码根目录可运行 `pnpm dsh`
+小雨需要 **macOS 14+** 和正在运行的 DeepSeek Harness。按[官方中文 README](https://github.com/deepseek-ai/deepseek-harness/blob/master/README.zh.md)选择一种 Web 启动方式：
 
-### 方式一：一键安装（推荐）
+安装 Node.js 后，直接通过 npm 运行：
 
 ```bash
-curl -fsSL https://github.com/sundusk/dsh-moodball/raw/refs/heads/main/install.sh | bash
+npx @deepseek-ai/dsh web
 ```
 
-脚本会自动：
+或安装 pnpm，从官方源码构建并运行：
+
+```bash
+git clone https://github.com/deepseek-ai/deepseek-harness.git
+cd deepseek-harness
+pnpm install
+pnpm run build
+pnpm dsh web
+```
+
+两种方式默认在 `http://127.0.0.1:3080` 打开 Web UI。已有 DeepSeek Harness 桌面版的用户也可以继续使用桌面版；其插件安装步骤见下文。
+
+### 安装小雨（当前版本）
+
+安装 Xcode 命令行工具后，另开一个终端执行：
+
+```bash
+git clone https://github.com/sundusk/dsh-pet.git
+cd dsh-pet
+MOODBALL_SKIP_OPEN=1 bash make-app.sh
+bash install.sh
+```
+
+`make-app.sh` 构建带小雨图集的 `dist/DSH Pet.app`。`install.sh` 使用这个本地产物，并会：
 
 1. 检测当前正在运行的 Harness，并识别桌面版、NPM/NPX 版或源码版
-2. 源码版在实际源码根目录执行 `pnpm dsh`；NPM/NPX 版执行对应的 `dsh` 或 `npx` CLI
+2. 源码版在实际源码根目录执行 `pnpm dsh`；NPM/NPX 版执行对应的 `dsh` 或 `npx @deepseek-ai/dsh` CLI
 3. CLI 版在目标 Harness 的 `web` profile 中检测/安装状态插件；桌面版通过应用内「插件」页面安装
-4. 从 GitHub latest release 下载 `DSH Pet.app`（本地存在 `dist/DSH Pet.app` 时优先使用）
+4. 安装刚构建的 `DSH Pet.app`
 5. 优先安装到 `/Applications`，无权限时自动回退到 `~/Applications` 并启动；安装后只保留一个 `DSH Pet.app`，旧版 `MoodBall.app` 和重复构建副本会移入废纸篓
 
-脚本只需要执行一次。若插件刚安装而当前 Harness 正在运行，脚本仍会继续安装并启动
+安装脚本只需要执行一次。若插件刚安装而当前 Harness 正在运行，脚本仍会继续安装并启动
 `DSH Pet.app`；请在当前任务完成后重启一次 DeepSeek Harness 让插件加载，**无需再次运行安装脚本**。
 如果 Harness 当前没有运行，DSH Pet 会先显示“未连接”，启动 Harness 后自动连接。
 
@@ -81,31 +108,29 @@ DSH_SOURCE_ROOT="$HOME/Projects/deepseek-harness" bash install.sh
 安装器会复用当前环境或已识别 Harness 的 `DSH_HOME`，并将最近使用的 Harness 类型、源码路径和 profile
 记录在 `~/Library/Application Support/MoodBall/config.json`，供下一次安装使用。
 
-桌面版使用独立的 `desktop` profile。请在桌面版「插件」页面安装并启用 `github:sundusk/dsh-moodball`，再重启桌面版让插件加载。公开 `dsh plugin` CLI 不能管理桌面版 profile；安装器检测到桌面版时不会把插件误装到 `web` profile。DSH Pet 使用本地 Socket 接收桌面版状态；桌面版晚启动或重启后会自动重连。
+桌面版使用独立的 `desktop` profile。请在桌面版「插件」页面安装并启用 `github:sundusk/dsh-pet`，再重启桌面版让插件加载。公开 `dsh plugin` CLI 不能管理桌面版 profile；安装器检测到桌面版时不会把插件误装到 `web` profile。DSH Pet 使用本地 Socket 接收桌面版状态；桌面版晚启动或重启后会自动重连。
 
-### 方式二：仓库安装
+### 手动安装桥接插件
+
+如果只安装了应用、需要单独补装插件，请根据 Harness 的启动方式执行对应命令，然后重启 Harness：
 
 ```bash
-git clone --depth 1 https://github.com/sundusk/dsh-moodball.git
-cd dsh-moodball
-bash install.sh
+# 通过 npx 运行 Harness
+npx @deepseek-ai/dsh plugin --profile web add github:sundusk/dsh-pet
+
+# 已安装全局 dsh 命令
+dsh plugin --profile web add github:sundusk/dsh-pet
+
+# 从源码运行 Harness：先进入 deepseek-harness 源码根目录
+pnpm dsh plugin --profile web add github:sundusk/dsh-pet
 ```
 
-与方式一完全等价（方式一其实就是直接运行仓库里的 install.sh），适合想顺带查看源码/自行构建的用户。
-
-### 方式三：下载 Release
-
-从 [最新 Release](https://github.com/sundusk/dsh-moodball/releases/latest)
-下载 `DSH-Pet.app.zip`，解压后放入 `~/Applications`（或「应用程序」），双击应用启动。
-
-> 提示：Release 安装不会自动装插件。若尚未安装，请先在终端执行
-> 对 NPM/NPX 版执行 `dsh plugin --profile web add github:sundusk/dsh-moodball`；
-> 对源码版必须在源码根目录执行 `pnpm dsh plugin --profile web add github:sundusk/dsh-moodball`，然后重启对应 Harness。
+桌面版请使用其「插件」页面；上面的 CLI 命令只针对 `web` profile。
 
 ## ✨ 使用
 
 安装并启动后，**桌面上没有任何窗口**——它是个纯菜单栏应用（不占 Dock、不抢焦点）：
-菜单栏右侧出现状态图标，桌面右下角出现当前皮肤的悬浮桌宠。
+菜单栏右侧出现状态图标，桌面右下角出现小雨（或你选择的其他皮肤）。
 
 ### 以后怎么打开？
 
@@ -121,10 +146,10 @@ bash install.sh
 | 设置… | 打开设置面板 |
 | 退出 | 退出 app（不影响 DSH 本体） |
 
-### 小球交互
+### 小雨交互
 
-- **拖动**：按住小球任意位置拖动，可把它移到任何地方（位置会记住）
-- **双击**：小球左右摇动约 2 秒，表示兴奋
+- **拖动**：按住小雨拖动，她会朝拖动方向奔跑，并记住停留位置
+- **双击**：待机时小雨会挥手
 - **锁定位置**（设置面板 → 行为）开启后不可拖拽，仍可双击
 
 ### 第一阶段：快捷入口
@@ -165,8 +190,8 @@ bash install.sh
 
 首次安装默认显示小雨；之后会记住你选择的宠物。
 
-- **心情球**：保留原有呼吸、眨眼、气泡和状态颜色。
 - **小雨**：使用迁移自 Harness Desktop 的像素图集，支持待机、思考、授权、提问、完成、失败、挥手，以及左右拖拽奔跑。
+- **心情球**：保留原有呼吸、眨眼、气泡和状态颜色。
 
 两种皮肤共用 Agent 状态、显隐、大小、气泡、发光、穿透和位置记忆设置。
 小雨的悬浮窗口按精灵和光晕收紧；状态气泡出现时才向上扩展，精灵之外的透明区域不会触发展开操作栏。
@@ -176,7 +201,7 @@ bash install.sh
 菜单栏 →「状态展示…」（⌘D）：查看每个状态下心情球的实时外观，可切换气泡文字的显示与隐藏，
 并可将当前状态保存为 PNG 图片。
 
-### 颜色含义
+### 心情球的颜色含义
 
 | 状态 | 心情球 | 颜色 |
 |---|---|---|
@@ -190,7 +215,7 @@ bash install.sh
 | 停止 / 中断 | ![停止 / 中断](docs/assets/moodball-stopped.png?v=2) | 黑色 |
 | 未连接 / 插件未装 | ![未连接](docs/assets/moodball-disconnected.png?v=2) | 灰色 |
 
-**所有颜色都可以在设置面板自定义。**
+**心情球的颜色可以在设置面板自定义。**
 
 ### 状态桥接与设置面板
 
@@ -206,8 +231,8 @@ DSH Pet 的状态 Socket 只读；输入功能由独立的用户级命令 Socket
 ### 卸载
 
 ```bash
-git clone --depth 1 https://github.com/sundusk/dsh-moodball.git
-cd dsh-moodball
+git clone --depth 1 https://github.com/sundusk/dsh-pet.git
+cd dsh-pet
 bash uninstall.sh
 ```
 
@@ -216,7 +241,7 @@ bash uninstall.sh
 
 ### 常见问题
 
-- **球是灰色的？** 先确认目标 Harness 正在运行、状态插件已安装并启用。CLI 版检查 `dsh web` 与 `web` profile；桌面版检查应用内「插件」页面与 `desktop` profile，插件刚安装后需重启桌面版。
+- **小雨显示未连接，或心情球是灰色的？** 先确认目标 Harness 正在运行、状态插件已安装并启用。CLI 版检查 Web 服务与 `web` profile；桌面版检查应用内「插件」页面与 `desktop` profile，插件刚安装后需重启桌面版。
 - **「设置 → 插件」里怎么没有 DSH Pet 插件卡片？** 这是正常的——桥接插件没有任何设置项
   （所有配置都在 app 的设置面板里），所以不显示配置卡片。可在「设置 → 插件 → **插件列表**」
   中查看它（状态为「已挂载」）。

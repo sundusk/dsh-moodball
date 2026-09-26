@@ -54,12 +54,12 @@ case "$ans" in
     y|Y|yes|YES)
         DSH_BIN=$(command -v dsh || ls -d "$HOME"/.npm/_npx/*/node_modules/.bin/dsh 2>/dev/null | head -1)
         if [ -n "$DSH_BIN" ]; then
-            "$DSH_BIN" plugin --profile web remove github:sundusk/dsh-moodball 2>&1 || {
-                info "插件移除失败，请手动执行：dsh plugin --profile web remove github:sundusk/dsh-moodball"
+            "$DSH_BIN" plugin --profile web remove github:sundusk/dsh-pet 2>&1 || {
+                info "插件移除失败，请手动执行：dsh plugin --profile web remove github:sundusk/dsh-pet"
             }
             ok "插件已移除（重启 dsh web 后生效）。"
         else
-            info "未找到 dsh 命令，请手动执行：dsh plugin --profile web remove github:sundusk/dsh-moodball"
+            info "未找到 dsh 命令，请手动执行：dsh plugin --profile web remove github:sundusk/dsh-pet"
         fi
         ;;
     *)

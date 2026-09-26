@@ -11,13 +11,13 @@
 # =============================================================================
 set -euo pipefail
 
-PLUGIN_SPEC="github:sundusk/dsh-moodball"
+PLUGIN_SPEC="github:sundusk/dsh-pet"
 PLUGIN_NAME="@sundusk/dsh-moodball-status"
 PLUGIN_PROFILE="web"
 STATUS_URL="${MOODBALL_STATUS_URL:-http://127.0.0.1:3080/api/moodball/status}"
 SOCKET_PATH="${MOODBALL_SOCKET_PATH:-$HOME/Library/Application Support/MoodBall/moodball.sock}"
 APP_SRC="dist/DSH Pet.app"
-RELEASE_URL="https://github.com/sundusk/dsh-moodball/releases/latest/download/DSH-Pet.app.zip"
+RELEASE_URL="https://github.com/sundusk/dsh-pet/releases/latest/download/DSH-Pet.app.zip"
 CONFIG_PATH="$HOME/Library/Application Support/MoodBall/config.json"
 
 APP_TMP=""
