@@ -6,6 +6,10 @@
 </p>
 
 <p align="center">
+  <img src="docs/assets/dsh-pet-harness-desktop.png" width="900" alt="DeepSeek Harness 桌面界面与右侧的小雨桌宠">
+</p>
+
+<p align="center">
   macOS 14+ · SwiftUI 原生应用 · 需要 DeepSeek Harness（DSH）运行
 </p>
 
