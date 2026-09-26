@@ -1,8 +1,8 @@
-<h1 align="center">小雨 · DSH Pet</h1>
+<h1 align="center">DSH Pet</h1>
 
 <p align="center">
-  让小雨陪你在 macOS 桌面上使用 DeepSeek Harness<br>
-  她会随 Agent 的状态变换动作，也能帮你查看任务、发送消息
+  以小雨的像素形象，把 DeepSeek Harness 的 Agent 状态带到 macOS 桌面<br>
+  随时查看任务、接收提醒、发送消息
 </p>
 
 <p align="center">
@@ -10,14 +10,14 @@
 </p>
 
 <p align="center">
-  <a href="#-安装">⬇️ 安装小雨</a>
+  <a href="#-安装">⬇️ 安装 DSH Pet</a>
 </p>
 
-## 🌧️ 认识小雨
+## 这是什么？
 
-**小雨**是 DSH Pet 默认的像素桌宠。她待在桌面上，随着 DeepSeek Harness 的任务状态
-待机、思考、等待授权或回答、庆祝完成，也会在任务失败时给出提示。你可以把她拖到屏幕任意位置，
-双击看她挥手；浏览器最小化后，她仍会显示状态气泡、任务提醒和消息入口。
+**DSH Pet** 是 DeepSeek Harness 的 macOS 桌面伴侣。它默认以小雨的形象显示 Agent 状态：
+待机、思考、等待授权或回答、完成和失败都有对应动作。你可以把桌宠拖到屏幕任意位置，
+通过状态气泡和任务卡片了解进度，也能直接从桌面向 Harness 发送消息；浏览器最小化后仍可使用。
 
 心情球仍可在「设置 → 外观 → 桌宠」中选择。
 
@@ -27,7 +27,7 @@
 - **dsh-moodball-status**：状态与输入桥接插件（订阅 Agent 会话事件，提供 HTTP/状态 Socket 兼容接口，以及用户级命令 Socket；无 Harness Web UI、无设置项）
 
 插件包名和应用数据目录暂沿用 `dsh-moodball` / `MoodBall`，以兼容已有配置。安装脚本会清理旧版 `MoodBall.app`。
-截至 2026-09-26，最新 Release 仍是旧版心情球（v0.5.2），尚未提供 `DSH-Pet.app.zip`；要使用小雨，请按下方步骤从本仓库构建。
+截至 2026-09-26，最新 Release 仍是旧版心情球（v0.5.2），尚未提供 `DSH-Pet.app.zip`；要使用当前版本的 DSH Pet，请按下方步骤从本仓库构建。
 
 一切配置都在 app 的设置面板里完成。
 
@@ -53,7 +53,7 @@
 
 ### 先运行 DeepSeek Harness
 
-小雨需要 **macOS 14+** 和正在运行的 DeepSeek Harness。按[官方中文 README](https://github.com/deepseek-ai/deepseek-harness/blob/master/README.zh.md)选择一种 Web 启动方式：
+DSH Pet 需要 **macOS 14+** 和正在运行的 DeepSeek Harness。按[官方中文 README](https://github.com/deepseek-ai/deepseek-harness/blob/master/README.zh.md)选择一种 Web 启动方式：
 
 安装 Node.js 后，直接通过 npm 运行：
 
@@ -73,7 +73,7 @@ pnpm dsh web
 
 两种方式默认在 `http://127.0.0.1:3080` 打开 Web UI。已有 DeepSeek Harness 桌面版的用户也可以继续使用桌面版；其插件安装步骤见下文。
 
-### 安装小雨（当前版本）
+### 安装 DSH Pet（当前版本）
 
 安装 Xcode 命令行工具后，另开一个终端执行：
 
